@@ -1,18 +1,25 @@
 defmodule Duet do
   @moduledoc """
-  Documentation for `Duet`.
   """
+end
 
-  @doc """
-  Hello world.
+defmodule Duet.Application do
+  use Application
 
-  ## Examples
+  @impl true
+  def start(_type, _args) do
+    children = [
+    ]
 
-      iex> Duet.hello()
-      :world
+    Supervisor.start_link(
+      children,
+      strategy: :one_for_one,
+      name: Duet.Supervisor
+    )
+  end
 
-  """
-  def hello do
-    :world
+  @impl true
+  def stop(_state) do
+    :ok
   end
 end
