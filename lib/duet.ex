@@ -8,6 +8,9 @@ defmodule Duet.Application do
 
   @impl true
   def start(_type, _args) do
+    # 起動が必要なサーバと役割
+    # - Orchestrator ポーリングからの全体統括
+    # - Task.Supervisor 非同期タスク管理役（共通）
     children = [
     ]
 
