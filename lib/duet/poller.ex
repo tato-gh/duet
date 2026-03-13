@@ -135,9 +135,27 @@ defmodule Duet.Poller do
     end
   end
 
-  defp parse_duetflow(path) do
-    content = File.read!(path)
+  @default_config %{
+    command: "codex app-server",
+    diff_command: "git diff HEAD",
+    poll_interval: 1000,
+    prompt: ""
+  }
 
+  defp parse_duetflow(path) do
+    case File.read(path) do
+      {:error, :enoent} ->
+        {:ok, @default_config}
+
+      {:error, reason} ->
+        {:error, "Failed to read DUETFLOW.md: #{reason}"}
+
+      {:ok, content} ->
+        parse_duetflow_content(content)
+    end
+  end
+
+  defp parse_duetflow_content(content) do
     {front_matter, prompt} =
       case String.split(content, "---\n", parts: 3) do
         ["", fm, body] -> {fm, String.trim(body)}
@@ -154,21 +172,13 @@ defmodule Duet.Poller do
         end
       end)
 
-    case Map.fetch(config, "command") do
-      {:ok, command} ->
-        {:ok,
-         %{
-           command: command,
-           diff_command: Map.get(config, "diff_command", "git diff HEAD"),
-           poll_interval: config |> Map.get("poll_interval", "1000") |> String.to_integer(),
-           prompt: prompt
-         }}
-
-      :error ->
-        {:error,
-         "DUETFLOW.md is missing required 'command' field.\n" <>
-           "Expected format:\n---\ncommand: codex app-server\n---\n<prompt>"}
-    end
+    {:ok,
+     %{
+       command: Map.get(config, "command", @default_config.command),
+       diff_command: Map.get(config, "diff_command", @default_config.diff_command),
+       poll_interval: config |> Map.get("poll_interval", "1000") |> String.to_integer(),
+       prompt: prompt
+     }}
   end
 
   defp run_diff(diff_command, cwd) do

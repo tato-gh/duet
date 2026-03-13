@@ -1,6 +1,6 @@
 defmodule Duet.CLI do
   @options [logs_root: :string]
-  @usage_message "Usage: duet [--logs-root <path>] [path-to-DUETFLOW.md]"
+  @usage_message "Usage: duet [--logs-root <path>] <path-to-DUETFLOW.md | project-dir>"
 
   def main(args) do
     case evaluate(args) do
@@ -15,26 +15,28 @@ defmodule Duet.CLI do
 
   defp evaluate(args) do
     case OptionParser.parse(args, strict: @options) do
-      {_opts, [duetflow_path], []} -> run(duetflow_path)
+      {_opts, [path], []} -> run(path)
       _ -> {:error, @usage_message}
     end
   end
 
-  defp run(duetflow_path) do
-    expanded_path = Path.expand(duetflow_path)
+  defp run(path) do
+    duetflow_path = resolve_duetflow_path(path)
     Process.flag(:trap_exit, true)
 
-    with true <- File.regular?(expanded_path),
-         :ok <- Duet.Duetflow.set_duetflow_file(expanded_path),
+    with :ok <- Duet.Duetflow.set_duetflow_file(duetflow_path),
          {:ok, _} <- Application.ensure_all_started(:phoenix_pubsub),
          {:ok, _pid} <- Duet.Application.start(:normal, []) do
       :ok
     else
       {:error, reason} ->
         {:error, "Failed to start: #{format_reason(reason)}"}
-      _error ->
-        {:error, "DUETFLOW.md not found: #{expanded_path}"}
     end
+  end
+
+  defp resolve_duetflow_path(input) do
+    expanded = Path.expand(input)
+    if File.dir?(expanded), do: Path.join(expanded, "DUETFLOW.md"), else: expanded
   end
 
   defp format_reason({:shutdown, {:failed_to_start_child, _child, reason}}),

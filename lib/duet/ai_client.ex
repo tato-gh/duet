@@ -7,8 +7,6 @@ defmodule Duet.AIClient do
   require Logger
 
   @topic "duet:events"
-  @debug Mix.env() == :dev
-
   @port_line_bytes 1_048_576
 
   # state:
@@ -142,14 +140,12 @@ defmodule Duet.AIClient do
 
   defp send_rpc(state, method, params) do
     msg = %{method: method, id: state.rpc_id, params: params}
-    if @debug, do: Logger.debug("[AIClient] → RPC id=#{state.rpc_id} method=#{method} params=#{inspect(params)}")
     Port.command(state.port, JSON.encode!(msg) <> "\n")
     %{state | rpc_id: state.rpc_id + 1}
   end
 
   defp send_notification(state, method, params) do
     msg = %{method: method, params: params}
-    if @debug, do: Logger.debug("[AIClient] → notification method=#{method} params=#{inspect(params)}")
     Port.command(state.port, JSON.encode!(msg) <> "\n")
     state
   end
@@ -199,6 +195,7 @@ defmodule Duet.AIClient do
   end
 
   defp handle_notification("turn/completed", _params, state) do
+    IO.puts("")
     state = %{state | status: :idle, pending_method: nil}
     flush_pending(state)
   end
@@ -210,12 +207,12 @@ defmodule Duet.AIClient do
     flush_pending(state)
   end
 
-  defp handle_notification("item/completed", params, state) do
-    with "agentMessage" <- get_in(params, ["item", "type"]),
-         text when is_binary(text) <- get_in(params, ["item", "text"]) do
-      IO.puts(text)
-    end
+  defp handle_notification("item/agentMessage/delta", params, state) do
+    IO.write(params["delta"] || "")
+    state
+  end
 
+  defp handle_notification("item/completed", _params, state) do
     state
   end
 
@@ -245,6 +242,8 @@ defmodule Duet.AIClient do
   defp flush_pending(%{pending_delta: delta} = state) when not is_nil(delta) do
     input = build_turn_input(state)
 
+    IO.puts("\n---\n")
+
     state =
       send_rpc(state, "turn/start", %{
         threadId: state.thread_id,
@@ -258,10 +257,18 @@ defmodule Duet.AIClient do
 
   defp flush_pending(state), do: %{state | status: :idle}
 
-  # 初回ターンのみ prompt を先頭に付与する
-  defp build_turn_input(%{first_turn: true, prompt: prompt, pending_delta: delta})
-       when is_binary(prompt) do
-    [%{type: "text", text: prompt <> "\n\n" <> delta}]
+  @meta_prompt "You are a partner to the user. The user sends messages to you via git diff output as the communication medium. Just respond directly and naturally — no need to treat this as a file editing task."
+
+  # 初回ターンのみ meta + prompt を先頭に付与する
+  defp build_turn_input(%{first_turn: true, prompt: prompt, pending_delta: delta}) do
+    header =
+      if is_binary(prompt) and prompt != "" do
+        @meta_prompt <> "\n\n" <> prompt
+      else
+        @meta_prompt
+      end
+
+    [%{type: "text", text: header <> "\n\n" <> delta}]
   end
 
   defp build_turn_input(%{pending_delta: delta}) do
