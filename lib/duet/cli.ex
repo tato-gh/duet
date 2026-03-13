@@ -14,31 +14,34 @@ defmodule Duet.CLI do
   end
 
   defp evaluate(args) do
-    args
-    |> OptionParser.parse(strict: @options)
-    |> case do
-      {opts, [duetflow_path], []} ->
-        run(duetflow_path)
-
-      _ ->
-        {:error, @usage_message}
+    case OptionParser.parse(args, strict: @options) do
+      {_opts, [duetflow_path], []} -> run(duetflow_path)
+      _ -> {:error, @usage_message}
     end
   end
 
   defp run(duetflow_path) do
     expanded_path = Path.expand(duetflow_path)
+    Process.flag(:trap_exit, true)
 
     with true <- File.regular?(expanded_path),
          :ok <- Duet.Duetflow.set_duetflow_file(expanded_path),
-         {:ok, _started_apps} <- Application.ensure_all_started(:duet) do
+         {:ok, _} <- Application.ensure_all_started(:phoenix_pubsub),
+         {:ok, _pid} <- Duet.Application.start(:normal, []) do
       :ok
     else
       {:error, reason} ->
-        {:error, "Failed to start Duet with #{expanded_path}: #{inspect(reason)}"}
+        {:error, "Failed to start: #{format_reason(reason)}"}
       _error ->
-        {:error, "Duetflow file not found or invalid: #{expanded_path}"}
+        {:error, "DUETFLOW.md not found: #{expanded_path}"}
     end
   end
+
+  defp format_reason({:shutdown, {:failed_to_start_child, _child, reason}}),
+    do: format_reason(reason)
+
+  defp format_reason(reason) when is_binary(reason), do: reason
+  defp format_reason(reason), do: inspect(reason)
 
   defp wait_for_shutdown do
     case Process.whereis(Duet.Supervisor) do
@@ -48,14 +51,15 @@ defmodule Duet.CLI do
 
       pid ->
         ref = Process.monitor(pid)
+        do_wait(ref, pid)
+    end
+  end
 
-        receive do
-          {:DOWN, ^ref, :process, ^pid, :normal} ->
-            System.halt(0)
-
-          _ ->
-            System.halt(1)
-        end
+  defp do_wait(ref, pid) do
+    receive do
+      {:DOWN, ^ref, :process, ^pid, :normal} -> System.halt(0)
+      {:DOWN, ^ref, :process, ^pid, _reason} -> System.halt(1)
+      _other -> do_wait(ref, pid)
     end
   end
 end

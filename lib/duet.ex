@@ -1,6 +1,5 @@
 defmodule Duet do
-  @moduledoc """
-  """
+  @moduledoc false
 end
 
 defmodule Duet.Application do
@@ -8,15 +7,16 @@ defmodule Duet.Application do
 
   @impl true
   def start(_type, _args) do
-    # 起動が必要なサーバと役割
-    # - Orchestrator ポーリングからの全体統括
-    # - Task.Supervisor 非同期タスク管理役（共通）
+    # Duet.PubSubは肝のためone_for_allで起動
+    # （通常は過度、練習用コード）
     children = [
+      {Phoenix.PubSub, name: Duet.PubSub},
+      Duet.ServiceSupervisor
     ]
 
     Supervisor.start_link(
       children,
-      strategy: :one_for_one,
+      strategy: :one_for_all,
       name: Duet.Supervisor
     )
   end
@@ -24,5 +24,22 @@ defmodule Duet.Application do
   @impl true
   def stop(_state) do
     :ok
+  end
+end
+
+defmodule Duet.ServiceSupervisor do
+  use Supervisor
+
+  def start_link(opts) do
+    Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  def init(_opts) do
+    children = [
+      Duet.Poller,
+      Duet.AIClient
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
   end
 end
