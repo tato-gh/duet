@@ -57,6 +57,7 @@ Duet の設定は、監視対象ディレクトリの `DUETFLOW.md` ファイル
 | `command` | `codex app-server` | app-server として起動するコマンド。差分を受け取り続ける常駐プロセスを指定する |
 | `diff_command` | `git diff HEAD` | 変更検出に使うコマンド。`git diff`（unstaged のみ）や `git diff HEAD`（staged + unstaged）など用途に応じて変更可。DUETFLOW.md 自体の変更は除外される |
 | `poll_interval` | `1000` | ポーリング間隔（ミリ秒） |
+| `include_untracked` | `false` | untrackedファイルをdiff対象に含めるか。`true`で有効化 |
 
 ### サンプル
 

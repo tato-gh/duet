@@ -83,7 +83,8 @@ defmodule Duet.Poller do
           cond do
             old.command != new_config.command or
               old.diff_command != new_config.diff_command or
-                old.poll_interval != new_config.poll_interval ->
+                old.poll_interval != new_config.poll_interval or
+                  old.include_untracked != new_config.include_untracked ->
               broadcast(:config_changed, %{config: new_config})
 
             old.prompt != new_config.prompt ->
@@ -100,7 +101,7 @@ defmodule Duet.Poller do
 
   defp check_diff(state) do
     cwd = Path.dirname(state.duetflow_path)
-    diff = run_diff(state.config.diff_command, cwd)
+    diff = run_diff(state.config.diff_command, cwd, state.config.include_untracked)
     new_hash = :crypto.hash(:sha256, diff) |> Base.encode16()
 
     if new_hash == state.prev_diff_hash do
@@ -139,6 +140,7 @@ defmodule Duet.Poller do
     command: "codex app-server",
     diff_command: "git diff HEAD",
     poll_interval: 1000,
+    include_untracked: false,
     prompt: ""
   }
 
@@ -177,18 +179,25 @@ defmodule Duet.Poller do
        command: Map.get(config, "command", @default_config.command),
        diff_command: Map.get(config, "diff_command", @default_config.diff_command),
        poll_interval: config |> Map.get("poll_interval", "1000") |> String.to_integer(),
+       include_untracked: config |> Map.get("include_untracked", "false") |> (&(&1 == "true")).(),
        prompt: prompt
      }}
   end
 
-  defp run_diff(diff_command, cwd) do
+  defp run_diff(diff_command, cwd, include_untracked) do
     {tracked, _} = System.cmd("sh", ["-c", diff_command <> " -- ."], cd: cwd, stderr_to_stdout: false)
-    {untracked, _} = System.cmd(
-      "sh",
-      ["-c", ~s(git ls-files --others --exclude-standard -- . | while IFS= read -r f; do git diff --no-index -- /dev/null "$f" 2>/dev/null; done)],
-      cd: cwd,
-      stderr_to_stdout: false
-    )
+    untracked =
+      if include_untracked do
+        {out, _} = System.cmd(
+          "sh",
+          ["-c", ~s(git ls-files --others --exclude-standard -- . | while IFS= read -r f; do git diff --no-index -- /dev/null "$f" 2>/dev/null; done)],
+          cd: cwd,
+          stderr_to_stdout: false
+        )
+        out
+      else
+        ""
+      end
     filter_duetflow(tracked <> untracked)
   end
 
