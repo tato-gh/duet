@@ -27,6 +27,7 @@ defmodule Duet.CLI do
     with :ok <- Duet.Duetflow.set_duetflow_file(duetflow_path),
          {:ok, _} <- Application.ensure_all_started(:phoenix_pubsub),
          {:ok, _pid} <- Duet.Application.start(:normal, []) do
+      spawn_link(fn -> read_stdin() end)
       :ok
     else
       {:error, reason} ->
@@ -62,6 +63,25 @@ defmodule Duet.CLI do
       {:DOWN, ^ref, :process, ^pid, :normal} -> System.halt(0)
       {:DOWN, ^ref, :process, ^pid, _reason} -> System.halt(1)
       _other -> do_wait(ref, pid)
+    end
+  end
+
+  defp read_stdin do
+    case IO.gets("") do
+      :eof ->
+        :ok
+
+      {:error, _} ->
+        :ok
+
+      line ->
+        text = String.trim(line)
+
+        if text != "" do
+          Phoenix.PubSub.broadcast(Duet.PubSub, "duet:events", {:user_message, %{text: text}})
+        end
+
+        read_stdin()
     end
   end
 end

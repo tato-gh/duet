@@ -19,6 +19,7 @@ defmodule Duet.AIClient do
   #                    レスポンスの id ではなく pending_method で分岐することで rpc_id 管理を不要にする
   #   pending_delta:   次のポーリング後に送るべき diff（nil = なし。最新のみ保持）
   #   pending_reset:   true なら turn 完了後に thread/start でコンテキストリセット
+  #   pending_user_input: ユーザーが標準入力から送った直接メッセージ（nil = なし）
   #   prompt:          現在の DUETFLOW.md プロンプト本文
   #   first_turn:      true なら次の turn/start に prompt を付与（thread/start 直後にリセット）
   #   buf:             line モードで noeol チャンクを蓄積するバッファ
@@ -47,6 +48,7 @@ defmodule Duet.AIClient do
       pending_method: nil,
       pending_delta: nil,
       pending_reset: false,
+      pending_user_input: nil,
       prompt: nil,
       first_turn: true,
       buf: ""
@@ -117,6 +119,12 @@ defmodule Duet.AIClient do
   @impl true
   def handle_info({:config_changed, _payload}, state) do
     {:stop, :config_changed, state}
+  end
+
+  # PubSub: ユーザーが標準入力からメッセージを送信
+  @impl true
+  def handle_info({:user_message, %{text: text}}, state) do
+    {:noreply, %{state | pending_user_input: text} |> maybe_flush()}
   end
 
   # --- Private: JSON デコードと処理 ---
@@ -237,6 +245,20 @@ defmodule Duet.AIClient do
       })
 
     %{state | pending_reset: false, status: :session_ready, pending_method: :thread_start}
+  end
+
+  defp flush_pending(%{pending_user_input: text} = state) when not is_nil(text) do
+    IO.puts("\n---\n")
+
+    state =
+      send_rpc(state, "turn/start", %{
+        threadId: state.thread_id,
+        input: [%{type: "text", text: text}],
+        cwd: state.cwd,
+        approvalPolicy: "never"
+      })
+
+    %{state | pending_user_input: nil, status: :waiting, pending_method: :turn_start}
   end
 
   defp flush_pending(%{pending_delta: delta} = state) when not is_nil(delta) do
