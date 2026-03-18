@@ -178,7 +178,7 @@ defmodule Duet.AIClient do
     state =
       send_rpc(state, "thread/start", %{
         approvalPolicy: "never",
-        sandbox: "readOnly",
+        sandbox: "read-only",
         cwd: state.cwd
       })
 
@@ -202,15 +202,16 @@ defmodule Duet.AIClient do
     state
   end
 
-  defp handle_notification("turn/completed", _params, state) do
-    IO.puts("")
-    state = %{state | status: :idle, pending_method: nil}
-    flush_pending(state)
-  end
+  # v2: turn/completed にすべての終了ステータスが集約された（failed/interrupted/completedをstatusで判定）
+  defp handle_notification("turn/completed", params, state) do
+    case get_in(params, ["turn", "status"]) do
+      s when s in ["failed", "interrupted"] ->
+        Logger.error("Turn ended with status: #{s}")
 
-  defp handle_notification(method, _params, state)
-       when method in ["turn/failed", "turn/cancelled"] do
-    Logger.error("Turn #{method}")
+      _ ->
+        IO.puts("")
+    end
+
     state = %{state | status: :idle, pending_method: nil}
     flush_pending(state)
   end
@@ -240,7 +241,7 @@ defmodule Duet.AIClient do
     state =
       send_rpc(state, "thread/start", %{
         approvalPolicy: "never",
-        sandbox: "readOnly",
+        sandbox: "read-only",
         cwd: state.cwd
       })
 
