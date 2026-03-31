@@ -8,21 +8,23 @@ defmodule Duet.AIClient do
 
   @topic "duet:events"
   @port_line_bytes 1_048_576
+  @non_interactive_answer "This is a non-interactive session. Operator input is unavailable."
 
   # state:
-  #   port:            app-server の OS プロセスポート
-  #   cwd:             DUETFLOW.md があるディレクトリ
-  #   thread_id:       thread/start レスポンスで得た UUID（nil = セッション未確立）
-  #   status:          :starting | :initializing | :session_ready | :idle | :waiting
-  #   rpc_id:          次に使う JSON-RPC id
-  #   pending_method:  直前に送ったリクエストの種別（:initialize | :thread_start | :turn_start | nil）
-  #                    レスポンスの id ではなく pending_method で分岐することで rpc_id 管理を不要にする
-  #   pending_delta:   次のポーリング後に送るべき diff（nil = なし。最新のみ保持）
-  #   pending_reset:   true なら turn 完了後に thread/start でコンテキストリセット
-  #   pending_user_input: ユーザーが標準入力から送った直接メッセージ（nil = なし）
-  #   prompt:          現在の DUETFLOW.md プロンプト本文
-  #   first_turn:      true なら次の turn/start に prompt を付与（thread/start 直後にリセット）
-  #   buf:             line モードで noeol チャンクを蓄積するバッファ
+  #   port:                 app-server の OS プロセスポート
+  #   cwd:                  DUETFLOW.md があるディレクトリ
+  #   thread_id:            thread/start レスポンスで得た UUID（nil = セッション未確立）
+  #   status:               :starting | :initializing | :session_ready | :idle | :waiting
+  #   rpc_id:               次に使う JSON-RPC id
+  #   pending_method:       直前に送ったリクエストの種別（:initialize | :thread_start | :turn_start | nil）
+  #                         レスポンスの id ではなく pending_method で分岐することで rpc_id 管理を不要にする
+  #   pending_delta:        次のポーリング後に送るべき diff（nil = なし。最新のみ保持）
+  #   pending_reset:        true なら turn 完了後に thread/start でコンテキストリセット
+  #   pending_user_input:   ユーザーが標準入力から送った直接メッセージ（nil = なし）
+  #   prompt:               現在の DUETFLOW.md プロンプト本文
+  #   first_turn:           true なら次の turn/start に prompt を付与（thread/start 直後にリセット）
+  #   file_change_approval: ファイル変更承認ポリシー（"reject" | "acceptForSession"）
+  #   buf:                  line モードで noeol チャンクを蓄積するバッファ
 
   # --- Public API ---
 
@@ -35,9 +37,9 @@ defmodule Duet.AIClient do
   @impl true
   def init(_opts) do
     Phoenix.PubSub.subscribe(Duet.PubSub, @topic)
-    command = Duet.Poller.get_command()
+    config = Duet.Poller.get_config()
     cwd = Duet.Duetflow.duetflow_file_path() |> Path.dirname()
-    port = start_app_server(command, cwd)
+    port = start_app_server(config.command, cwd)
 
     state = %{
       port: port,
@@ -51,6 +53,7 @@ defmodule Duet.AIClient do
       pending_user_input: nil,
       prompt: nil,
       first_turn: true,
+      file_change_approval: config.file_change_approval,
       buf: ""
     }
 
@@ -136,8 +139,13 @@ defmodule Duet.AIClient do
     rescue
       _ ->
         trimmed = String.trim(line)
+
         if trimmed != "" do
-          Logger.debug("[AIClient] non-JSON: #{String.slice(trimmed, 0, 200)}")
+          if String.match?(trimmed, ~r/\b(error|warn|warning|failed|fatal|panic|exception)\b/i) do
+            Logger.warning("[AIClient] non-JSON: #{String.slice(trimmed, 0, 200)}")
+          else
+            Logger.debug("[AIClient] non-JSON: #{String.slice(trimmed, 0, 200)}")
+          end
         end
 
         state
@@ -179,7 +187,8 @@ defmodule Duet.AIClient do
       send_rpc(state, "thread/start", %{
         approvalPolicy: "never",
         sandbox: "read-only",
-        cwd: state.cwd
+        cwd: state.cwd,
+        dynamicTools: []
       })
 
     %{state | status: :session_ready, pending_method: :thread_start}
@@ -230,9 +239,64 @@ defmodule Duet.AIClient do
     state
   end
 
-  defp handle_notification("item/fileChange/requestApproval", params, state) do
-    send_response(state, params["id"], %{decision: "reject"})
+  defp handle_notification("execCommandApproval", params, state) do
+    send_response(state, params["id"], %{decision: "approved_for_session"})
     state
+  end
+
+  defp handle_notification("applyPatchApproval", params, state) do
+    send_response(state, params["id"], %{decision: "approved_for_session"})
+    state
+  end
+
+  defp handle_notification("item/fileChange/requestApproval", params, state) do
+    send_response(state, params["id"], %{decision: state.file_change_approval})
+    state
+  end
+
+  defp handle_notification("item/tool/call", params, state) do
+    result = %{
+      "success" => false,
+      "output" => "Unsupported dynamic tool: #{inspect(params["tool"] || params["name"])}",
+      "contentItems" => [%{"type" => "inputText", "text" => "unsupported"}]
+    }
+
+    send_response(state, params["id"], result)
+    state
+  end
+
+  defp handle_notification("item/tool/requestUserInput", params, state) do
+    case build_non_interactive_answers(params) do
+      {:ok, answers} ->
+        send_response(state, params["id"], %{answers: answers})
+
+      :error ->
+        Logger.warning("[AIClient] item/tool/requestUserInput: cannot build answers, ignoring")
+    end
+
+    state
+  end
+
+  defp handle_notification("turn/failed", params, state) do
+    Logger.error("[AIClient] turn/failed: #{inspect(params)}")
+    state = %{state | status: :idle, pending_method: nil}
+    flush_pending(state)
+  end
+
+  defp handle_notification("turn/cancelled", params, state) do
+    Logger.warning("[AIClient] turn/cancelled: #{inspect(params)}")
+    state = %{state | status: :idle, pending_method: nil}
+    flush_pending(state)
+  end
+
+  defp handle_notification("turn/" <> _ = method, params, state) do
+    if input_required?(params) do
+      Logger.warning("[AIClient] turn input required (method=#{method}), treating as turn end")
+      state = %{state | status: :idle, pending_method: nil}
+      flush_pending(state)
+    else
+      state
+    end
   end
 
   defp handle_notification(_method, _params, state), do: state
@@ -242,7 +306,8 @@ defmodule Duet.AIClient do
       send_rpc(state, "thread/start", %{
         approvalPolicy: "never",
         sandbox: "read-only",
-        cwd: state.cwd
+        cwd: state.cwd,
+        dynamicTools: []
       })
 
     %{state | pending_reset: false, status: :session_ready, pending_method: :thread_start}
@@ -313,10 +378,39 @@ defmodule Duet.AIClient do
       [
         :binary,
         :exit_status,
+        :stderr_to_stdout,
         args: [~c"-lc", String.to_charlist(command)],
         cd: String.to_charlist(cwd),
         line: @port_line_bytes
       ]
     )
   end
+
+  defp build_non_interactive_answers(%{"questions" => questions}) when is_list(questions) do
+    result =
+      Enum.reduce_while(questions, %{}, fn
+        %{"id" => qid}, acc when is_binary(qid) ->
+          {:cont, Map.put(acc, qid, %{"answers" => [@non_interactive_answer]})}
+
+        _, _ ->
+          {:halt, :error}
+      end)
+
+    case result do
+      :error -> :error
+      map when map_size(map) > 0 -> {:ok, map}
+      _ -> :error
+    end
+  end
+
+  defp build_non_interactive_answers(_), do: :error
+
+  defp input_required?(params) when is_map(params) do
+    Map.get(params, "requiresInput") == true or
+      Map.get(params, "needsInput") == true or
+      Map.get(params, "input_required") == true or
+      Map.get(params, "inputRequired") == true
+  end
+
+  defp input_required?(_), do: false
 end
