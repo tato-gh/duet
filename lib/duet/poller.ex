@@ -25,6 +25,10 @@ defmodule Duet.Poller do
     GenServer.call(__MODULE__, :get_command)
   end
 
+  def get_config do
+    GenServer.call(__MODULE__, :get_config)
+  end
+
   # --- Callbacks ---
 
   @impl true
@@ -57,6 +61,11 @@ defmodule Duet.Poller do
   end
 
   @impl true
+  def handle_call(:get_config, _from, state) do
+    {:reply, state.config, state}
+  end
+
+  @impl true
   def handle_info(:poll, state) do
     state = check_duetflow(state)
     state = check_diff(state)
@@ -84,7 +93,8 @@ defmodule Duet.Poller do
             old.command != new_config.command or
               old.diff_command != new_config.diff_command or
                 old.poll_interval != new_config.poll_interval or
-                  old.include_untracked != new_config.include_untracked ->
+                  old.include_untracked != new_config.include_untracked or
+                    old.file_change_approval != new_config.file_change_approval ->
               broadcast(:config_changed, %{config: new_config})
 
             old.prompt != new_config.prompt ->
@@ -141,6 +151,7 @@ defmodule Duet.Poller do
     diff_command: "git diff HEAD",
     poll_interval: 1000,
     include_untracked: false,
+    file_change_approval: "reject",
     prompt: ""
   }
 
@@ -180,6 +191,7 @@ defmodule Duet.Poller do
        diff_command: Map.get(config, "diff_command", @default_config.diff_command),
        poll_interval: config |> Map.get("poll_interval", "1000") |> String.to_integer(),
        include_untracked: config |> Map.get("include_untracked", "false") |> (&(&1 == "true")).(),
+       file_change_approval: Map.get(config, "file_change_approval", @default_config.file_change_approval),
        prompt: prompt
      }}
   end
