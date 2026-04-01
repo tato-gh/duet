@@ -25,6 +25,8 @@ defmodule Duet.CLI do
     Process.flag(:trap_exit, true)
 
     with :ok <- Duet.Duetflow.set_duetflow_file(duetflow_path),
+         {:ok, config} <- Duet.Duetflow.parse(duetflow_path),
+         :ok <- start_node(config.node_name),
          {:ok, _} <- Application.ensure_all_started(:phoenix_pubsub),
          {:ok, _pid} <- Duet.Application.start(:normal, []) do
       spawn_link(fn -> read_stdin() end)
@@ -32,6 +34,14 @@ defmodule Duet.CLI do
     else
       {:error, reason} ->
         {:error, "Failed to start: #{format_reason(reason)}"}
+    end
+  end
+
+  defp start_node(node_name) do
+    case Node.start(String.to_atom(node_name), :shortnames) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+      {:error, reason} -> {:error, "Failed to start Erlang node: #{inspect(reason)}"}
     end
   end
 

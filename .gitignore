@@ -25,3 +25,4 @@ duet-*.tar
 /bin/
 
 .claude/skills/
+.codex/skills/

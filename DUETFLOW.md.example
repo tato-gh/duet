@@ -1,0 +1,40 @@
+---
+# Duet が起動する Erlang ノード名。
+# 省略時は duet@<hostname>
+node_name: "duet@myhostname"
+
+# git diff 監視モード（Mode A）
+diff_watch:
+  enabled: true
+  # LLM に使うコマンド
+  command: "codex app-server"
+  # 差分取得コマンド
+  diff_command: "git diff HEAD"
+  # ポーリング間隔（ms）
+  poll_interval: 1000
+  # 未追跡ファイルを差分に含めるか
+  include_untracked: false
+  # ファイル変更の承認ポリシー: "reject" | "approve"
+  file_change_approval: "reject"
+  # diff_watch モードのシステムプロンプト
+  prompt: |
+    あなたはペアプログラマーです。
+    git diff の内容をもとに、変更の意図を汲み取りながら自然に応答してください。
+
+# erpc 経由で AI と対話するモード（Mode B）
+# 各エントリが独立した AI（独自スレッド）を持つ
+erpc_channel:
+  - name: "review"
+    enabled: true
+    command: "codex app-server"
+    prompt: |
+      あなたはコードレビュアーです。
+      提供されたコードの問題点・改善点を具体的に指摘してください。
+
+  - name: "summary"
+    enabled: true
+    command: "codex app-server"
+    prompt: |
+      あなたは要約担当です。
+      与えられた内容を簡潔にまとめてください。
+---

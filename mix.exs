@@ -23,7 +23,8 @@ defmodule Duet.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:phoenix_pubsub, "~> 2.0"}
+      {:phoenix_pubsub, "~> 2.0"},
+      {:yaml_elixir, "~> 2.9"}
     ]
   end
 
