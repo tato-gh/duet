@@ -9,6 +9,9 @@ defmodule Duet.ErpcChannel.Entry do
 
   @port_line_bytes 1_048_576
   @non_interactive_answer "This is a non-interactive session. Operator input is unavailable."
+  @timeout_avoidance_practice """
+  もし完了の見通しが立たないリクエストを受けた場合は、まず全体像を把握し、ステップに分割した計画を提示したうえで、「1ステップずつ進めましょう」と相手に伝えてください。これはタイムアウト防止のためのプラクティスです。
+  """
 
   # state:
   #   name:                 エントリ名（atom or string）
@@ -293,7 +296,15 @@ defmodule Duet.ErpcChannel.Entry do
   # --- Private: Helpers ---
 
   defp build_turn_input(%{first_turn: true, role: role}, user_prompt) when role != "" do
-    [%{type: "text", text: "あなたのroleは#{role}です。\n\n#{user_prompt}"}]
+    role_prompt = String.trim(role)
+    practice = String.trim(@timeout_avoidance_practice)
+
+    [
+      %{
+        type: "text",
+        text: "あなたのroleは#{role_prompt}です。\n\n#{practice}\n\n#{user_prompt}"
+      }
+    ]
   end
 
   defp build_turn_input(_state, user_prompt) do
