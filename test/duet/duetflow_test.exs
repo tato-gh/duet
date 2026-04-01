@@ -117,9 +117,13 @@ defmodule Duet.DuetflowTest do
     assert msg =~ "dup"
   end
 
-  test "parse/1 returns error when file does not exist" do
-    assert {:error, msg} = Duet.Duetflow.parse("/nonexistent/path/DUETFLOW.md")
-    assert msg =~ "Failed to read DUETFLOW.md"
+  test "parse/1 returns default config when file does not exist" do
+    assert {:ok, config} = Duet.Duetflow.parse("/nonexistent/path/DUETFLOW.md")
+    assert config.diff_watch.enabled == true
+    assert config.diff_watch.command == "codex app-server"
+    assert config.diff_watch.diff_command == "git diff HEAD"
+    assert config.erpc_channel == []
+    assert String.starts_with?(config.node_name, "duet@")
   end
 
   test "parse/1 returns error when front-matter is missing" do

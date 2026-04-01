@@ -74,10 +74,10 @@ defmodule Duet.ConfigWatcher do
 
     if old_dw.enabled != new_dw.enabled or
          old_dw.command != new_dw.command or
-           old_dw.diff_command != new_dw.diff_command or
-             old_dw.poll_interval != new_dw.poll_interval or
-               old_dw.include_untracked != new_dw.include_untracked or
-                 old_dw.file_change_approval != new_dw.file_change_approval do
+         old_dw.diff_command != new_dw.diff_command or
+         old_dw.poll_interval != new_dw.poll_interval or
+         old_dw.include_untracked != new_dw.include_untracked or
+         old_dw.file_change_approval != new_dw.file_change_approval do
       broadcast(:config_changed, %{config: new_dw})
     end
 

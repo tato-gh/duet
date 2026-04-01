@@ -17,32 +17,53 @@ Duet の erpc_channel モードを通じて、設定済みの AI エントリ（
 
 ### 1. 利用可能なエントリ確認
 
-同フォルダの `entries.exs` を使う。
+同フォルダの `entries.exs` を使う。絶対パスで直指定できる。
 
 ```bash
-elixir --sname NAME@localhost entries.exs
-# 例:
-elixir --sname aiagent@localhost entries.exs
+elixir --sname NAME@localhost /path/to/skill_duet/entries.exs
 ```
 
 ### 2. 単一エントリへの問い合わせ
 
-同フォルダの `post.exs` を使う。
+同フォルダの `post.exs` を使う。絶対パスで直指定できる。
 
 ```bash
-elixir --sname NAME@localhost post.exs ENTRY_NAME "PROMPT"
-# 例:
-elixir --sname aiagent@localhost post.exs review "このコードをレビューして"
+elixir --sname NAME@localhost /path/to/skill_duet/post.exs ENTRY_NAME "PROMPT"
+```
+
+ヒアドキュメントで複数行プロンプトも指定可能：
+
+```bash
+elixir --sname NAME@localhost /path/to/skill_duet/post.exs ENTRY_NAME "$(cat <<'EOF'
+複数行のプロンプト
+行2
+行3
+EOF
+)"
 ```
 
 ### 3. 複数エントリへの並行問い合わせ
 
-同フォルダの `post_parallel.exs` を使う。エントリ名とプロンプトを交互に並べる。
+同フォルダの `post_parallel.exs` を使う。エントリ名とプロンプトを交互に並べる。絶対パスで直指定できる。
 
 ```bash
-elixir --sname NAME@localhost post_parallel.exs ENTRY1 "PROMPT1" ENTRY2 "PROMPT2"
-# 例:
-elixir --sname aiagent@localhost post_parallel.exs review "コードをレビューして" summary "PRを要約して"
+elixir --sname NAME@localhost /path/to/skill_duet/post_parallel.exs ENTRY1 "PROMPT1" ENTRY2 "PROMPT2"
+```
+
+改行とヒアドキュメントで、複数行プロンプトを読みやすく指定可能：
+
+```bash
+elixir --sname NAME@localhost /path/to/skill_duet/post_parallel.exs \
+  entry1 "$(cat <<'EOF'
+プロンプト1
+複数行
+EOF
+)" \
+  entry2 "$(cat <<'EOF'
+プロンプト2
+複数行
+EOF
+)"
 ```
 
 ## エラー

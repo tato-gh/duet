@@ -1,6 +1,6 @@
 defmodule Duet.CLI do
-  @options [logs_root: :string]
-  @usage_message "Usage: duet [--logs-root <path>] <path-to-DUETFLOW.md | project-dir>"
+  @options []
+  @usage_message "Usage: duet <path-to-DUETFLOW.md | project-dir>"
 
   def main(args) do
     case evaluate(args) do
@@ -38,7 +38,7 @@ defmodule Duet.CLI do
   end
 
   defp start_node(node_name) do
-    case Node.start(String.to_atom(node_name <> "@localhost"), :shortnames) do
+    case Node.start(resolve_node_name(node_name), :shortnames) do
       {:ok, _} ->
         Node.set_cookie(:duet_cookie)
         :ok
@@ -49,6 +49,14 @@ defmodule Duet.CLI do
 
       {:error, reason} ->
         {:error, "Failed to start Erlang node: #{inspect(reason)}"}
+    end
+  end
+
+  defp resolve_node_name(node_name) do
+    if String.contains?(node_name, "@") do
+      String.to_atom(node_name)
+    else
+      String.to_atom("#{node_name}@localhost")
     end
   end
 

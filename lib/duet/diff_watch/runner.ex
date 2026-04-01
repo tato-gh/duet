@@ -5,6 +5,7 @@ defmodule Duet.DiffWatch.Runner do
 
   use GenServer
   require Logger
+  alias Duet.AppServerCommon
 
   @topic "duet:events"
   @port_line_bytes 1_048_576
@@ -38,7 +39,7 @@ defmodule Duet.DiffWatch.Runner do
     Phoenix.PubSub.subscribe(Duet.PubSub, @topic)
     config = Duet.ConfigWatcher.get_config().diff_watch
     cwd = Duet.Duetflow.duetflow_file_path() |> Path.dirname()
-    port = start_app_server(config.command, cwd)
+    port = AppServerCommon.start_app_server(config.command, cwd, @port_line_bytes)
 
     state = %{
       port: port,
@@ -63,7 +64,7 @@ defmodule Duet.DiffWatch.Runner do
   @impl true
   def handle_info(:do_initialize, state) do
     state =
-      send_rpc(state, "initialize", %{
+      AppServerCommon.send_rpc(state, "initialize", %{
         capabilities: %{experimentalApi: true},
         clientInfo: %{name: "duet", title: "Duet", version: "0.1.0"}
       })
@@ -101,7 +102,8 @@ defmodule Duet.DiffWatch.Runner do
 
   @impl true
   def handle_info({:context_reset, %{prompt: prompt}}, state) do
-    {:noreply, %{state | prompt: prompt, pending_delta: nil, pending_reset: true} |> maybe_flush()}
+    {:noreply,
+     %{state | prompt: prompt, pending_delta: nil, pending_reset: true} |> maybe_flush()}
   end
 
   @impl true
@@ -126,37 +128,7 @@ defmodule Duet.DiffWatch.Runner do
   # --- Private: JSON デコードと処理 ---
 
   defp decode_and_process(line, state) do
-    try do
-      msg = JSON.decode!(line)
-      process_message(msg, state)
-    rescue
-      _ ->
-        trimmed = String.trim(line)
-
-        if trimmed != "" do
-          if String.match?(trimmed, ~r/\b(error|warn|warning|failed|fatal|panic|exception)\b/i) do
-            Logger.warning("[DiffWatch.Runner] non-JSON: #{String.slice(trimmed, 0, 200)}")
-          else
-            Logger.debug("[DiffWatch.Runner] non-JSON: #{String.slice(trimmed, 0, 200)}")
-          end
-        end
-
-        state
-    end
-  end
-
-  # --- Private: JSON-RPC 送受信 ---
-
-  defp send_rpc(state, method, params) do
-    msg = %{method: method, id: state.rpc_id, params: params}
-    Port.command(state.port, JSON.encode!(msg) <> "\n")
-    %{state | rpc_id: state.rpc_id + 1}
-  end
-
-  defp send_notification(state, method, params) do
-    msg = %{method: method, params: params}
-    Port.command(state.port, JSON.encode!(msg) <> "\n")
-    state
+    AppServerCommon.decode_and_process(line, state, &process_message/2, "[DiffWatch.Runner]")
   end
 
   defp process_message(%{"result" => result} = msg, state) do
@@ -174,10 +146,10 @@ defmodule Duet.DiffWatch.Runner do
   defp process_message(_msg, state), do: state
 
   defp handle_response(_id, _result, %{pending_method: :initialize} = state) do
-    state = send_notification(state, "initialized", %{})
+    state = AppServerCommon.send_notification(state, "initialized", %{})
 
     state =
-      send_rpc(state, "thread/start", %{
+      AppServerCommon.send_rpc(state, "thread/start", %{
         approvalPolicy: "never",
         sandbox: "read-only",
         cwd: state.cwd,
@@ -225,22 +197,22 @@ defmodule Duet.DiffWatch.Runner do
   defp handle_notification("item/completed", _params, state), do: state
 
   defp handle_notification("item/commandExecution/requestApproval", params, state) do
-    send_response(state, params["id"], %{decision: "acceptForSession"})
+    AppServerCommon.send_response(state, params["id"], %{decision: "acceptForSession"})
     state
   end
 
   defp handle_notification("execCommandApproval", params, state) do
-    send_response(state, params["id"], %{decision: "approved_for_session"})
+    AppServerCommon.send_response(state, params["id"], %{decision: "approved_for_session"})
     state
   end
 
   defp handle_notification("applyPatchApproval", params, state) do
-    send_response(state, params["id"], %{decision: "approved_for_session"})
+    AppServerCommon.send_response(state, params["id"], %{decision: "approved_for_session"})
     state
   end
 
   defp handle_notification("item/fileChange/requestApproval", params, state) do
-    send_response(state, params["id"], %{decision: state.file_change_approval})
+    AppServerCommon.send_response(state, params["id"], %{decision: state.file_change_approval})
     state
   end
 
@@ -251,14 +223,14 @@ defmodule Duet.DiffWatch.Runner do
       "contentItems" => [%{"type" => "inputText", "text" => "unsupported"}]
     }
 
-    send_response(state, params["id"], result)
+    AppServerCommon.send_response(state, params["id"], result)
     state
   end
 
   defp handle_notification("item/tool/requestUserInput", params, state) do
-    case build_non_interactive_answers(params) do
+    case AppServerCommon.build_non_interactive_answers(params, @non_interactive_answer) do
       {:ok, answers} ->
-        send_response(state, params["id"], %{answers: answers})
+        AppServerCommon.send_response(state, params["id"], %{answers: answers})
 
       :error ->
         Logger.warning(
@@ -282,7 +254,7 @@ defmodule Duet.DiffWatch.Runner do
   end
 
   defp handle_notification("turn/" <> _ = method, params, state) do
-    if input_required?(params) do
+    if AppServerCommon.input_required?(params) do
       Logger.warning(
         "[DiffWatch.Runner] turn input required (method=#{method}), treating as turn end"
       )
@@ -298,7 +270,7 @@ defmodule Duet.DiffWatch.Runner do
 
   defp flush_pending(%{pending_reset: true} = state) do
     state =
-      send_rpc(state, "thread/start", %{
+      AppServerCommon.send_rpc(state, "thread/start", %{
         approvalPolicy: "never",
         sandbox: "read-only",
         cwd: state.cwd,
@@ -312,7 +284,7 @@ defmodule Duet.DiffWatch.Runner do
     IO.puts("\n---\n")
 
     state =
-      send_rpc(state, "turn/start", %{
+      AppServerCommon.send_rpc(state, "turn/start", %{
         threadId: state.thread_id,
         input: [%{type: "text", text: text}],
         cwd: state.cwd,
@@ -326,14 +298,20 @@ defmodule Duet.DiffWatch.Runner do
     IO.puts("\n---\n")
 
     state =
-      send_rpc(state, "turn/start", %{
+      AppServerCommon.send_rpc(state, "turn/start", %{
         threadId: state.thread_id,
         input: build_turn_input(state),
         cwd: state.cwd,
         approvalPolicy: "never"
       })
 
-    %{state | pending_delta: nil, status: :waiting, pending_method: :turn_start, first_turn: false}
+    %{
+      state
+      | pending_delta: nil,
+        status: :waiting,
+        pending_method: :turn_start,
+        first_turn: false
+    }
   end
 
   defp flush_pending(state), do: %{state | status: :idle}
@@ -355,54 +333,6 @@ defmodule Duet.DiffWatch.Runner do
     [%{type: "text", text: delta}]
   end
 
-  defp send_response(state, id, result) do
-    Port.command(state.port, JSON.encode!(%{id: id, result: result}) <> "\n")
-  end
-
   defp maybe_flush(%{status: :idle} = state), do: flush_pending(state)
   defp maybe_flush(state), do: state
-
-  defp start_app_server(command, cwd) do
-    bash = System.find_executable("bash") || raise "bash not found in PATH"
-
-    Port.open(
-      {:spawn_executable, String.to_charlist(bash)},
-      [
-        :binary,
-        :exit_status,
-        :stderr_to_stdout,
-        args: [~c"-lc", String.to_charlist(command)],
-        cd: String.to_charlist(cwd),
-        line: @port_line_bytes
-      ]
-    )
-  end
-
-  defp build_non_interactive_answers(%{"questions" => questions}) when is_list(questions) do
-    result =
-      Enum.reduce_while(questions, %{}, fn
-        %{"id" => qid}, acc when is_binary(qid) ->
-          {:cont, Map.put(acc, qid, %{"answers" => [@non_interactive_answer]})}
-
-        _, _ ->
-          {:halt, :error}
-      end)
-
-    case result do
-      :error -> :error
-      map when map_size(map) > 0 -> {:ok, map}
-      _ -> :error
-    end
-  end
-
-  defp build_non_interactive_answers(_), do: :error
-
-  defp input_required?(params) when is_map(params) do
-    Map.get(params, "requiresInput") == true or
-      Map.get(params, "needsInput") == true or
-      Map.get(params, "input_required") == true or
-      Map.get(params, "inputRequired") == true
-  end
-
-  defp input_required?(_), do: false
 end

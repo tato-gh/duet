@@ -24,6 +24,7 @@ defmodule Duet.Duetflow do
 
   def parse(path) do
     case File.read(path) do
+      {:error, :enoent} -> {:ok, default_config()}
       {:error, reason} -> {:error, "Failed to read DUETFLOW.md: #{inspect(reason)}"}
       {:ok, content} -> parse_content(content)
     end
@@ -99,5 +100,13 @@ defmodule Duet.Duetflow do
   defp default_hostname do
     {:ok, hostname} = :inet.gethostname()
     to_string(hostname)
+  end
+
+  defp default_config do
+    %{
+      node_name: "duet@#{default_hostname()}",
+      diff_watch: @default_diff_watch,
+      erpc_channel: []
+    }
   end
 end
