@@ -38,10 +38,17 @@ defmodule Duet.CLI do
   end
 
   defp start_node(node_name) do
-    case Node.start(String.to_atom(node_name), :shortnames) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-      {:error, reason} -> {:error, "Failed to start Erlang node: #{inspect(reason)}"}
+    case Node.start(String.to_atom(node_name <> "@localhost"), :shortnames) do
+      {:ok, _} ->
+        Node.set_cookie(:duet_cookie)
+        :ok
+
+      {:error, {:already_started, _}} ->
+        Node.set_cookie(:duet_cookie)
+        :ok
+
+      {:error, reason} ->
+        {:error, "Failed to start Erlang node: #{inspect(reason)}"}
     end
   end
 

@@ -62,24 +62,16 @@ git add . && git commit -m "init"
 ```bash
 cp ~/duet/DUETFLOW.md.example ~/foo/DUETFLOW.md
 mkdir -p ~/foo/.claude/skills
-ln -s ~/duet/skill_duet_erpc_channel.example ~/foo/.claude/skills/skill_duet_erpc_channel
+ln -s ~/duet/skill_duet.example ~/foo/.claude/skills/skill_duet
 ```
 
-### 4. node_name を設定する
-
-`~/foo/DUETFLOW.md` の `node_name` を実際のホスト名に変更する：
-
-```yaml
-node_name: "duet@<hostname コマンドの出力>"
-```
-
-### 5. Duet を起動する（別ターミナル）
+### 4. Duet を起動する（別ターミナル）
 
 ```bash
 ~/duet/bin/duet ~/foo
 ```
 
-### 6. 動作確認
+### 5. 動作確認
 
 **diff_watch（Mode A）：**
 

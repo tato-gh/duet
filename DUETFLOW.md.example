@@ -1,7 +1,7 @@
 ---
-# Duet が起動する Erlang ノード名。
-# 省略時は duet@<hostname>
-node_name: "duet@myhostname"
+# Duet が起動する Erlang ノード名。snameで起動
+# 省略時は duet
+node_name: "duet"
 
 # git diff 監視モード（Mode A）
 diff_watch:
