@@ -118,6 +118,11 @@ defmodule Duet.DiffWatch.Runner do
   end
 
   @impl true
+  def handle_info({:user_clear, _}, state) do
+    {:noreply, %{state | pending_reset: true} |> maybe_flush()}
+  end
+
+  @impl true
   def handle_info({:user_message, %{text: text}}, state) do
     {:noreply, %{state | pending_user_input: text} |> maybe_flush()}
   end

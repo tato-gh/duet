@@ -102,8 +102,15 @@ defmodule Duet.CLI do
       line ->
         text = String.trim(line)
 
-        if text != "" do
-          Phoenix.PubSub.broadcast(Duet.PubSub, "duet:events", {:user_message, %{text: text}})
+        cond do
+          text == "/clear" ->
+            Phoenix.PubSub.broadcast(Duet.PubSub, "duet:events", {:user_clear, %{}})
+
+          text != "" ->
+            Phoenix.PubSub.broadcast(Duet.PubSub, "duet:events", {:user_message, %{text: text}})
+
+          true ->
+            :ok
         end
 
         read_stdin()

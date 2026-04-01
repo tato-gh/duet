@@ -83,6 +83,20 @@ defmodule Duet.ErpcChannel.Entry do
   end
 
   @impl true
+  def handle_call({:post, "/clear"}, from, state) do
+    state =
+      AppServerCommon.send_rpc(state, "thread/start", %{
+        approvalPolicy: "never",
+        sandbox: "read-only",
+        cwd: state.cwd,
+        dynamicTools: []
+      })
+
+    {:noreply,
+     %{state | status: :session_ready, pending_method: :thread_start, pending_call: from}}
+  end
+
+  @impl true
   def handle_call({:post, prompt}, from, state) do
     input = build_turn_input(state, prompt)
 
@@ -181,7 +195,14 @@ defmodule Duet.ErpcChannel.Entry do
 
   defp handle_response(_id, result, %{pending_method: :thread_start} = state) do
     thread_id = get_in(result, ["thread", "id"])
-    %{state | thread_id: thread_id, status: :idle, pending_method: nil, first_turn: true}
+    state = %{state | thread_id: thread_id, status: :idle, pending_method: nil, first_turn: true}
+
+    if state.pending_call do
+      GenServer.reply(state.pending_call, {:ok, ""})
+      %{state | pending_call: nil}
+    else
+      state
+    end
   end
 
   defp handle_response(_id, _result, %{pending_method: :turn_start} = state) do
