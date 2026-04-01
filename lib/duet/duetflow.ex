@@ -83,7 +83,7 @@ defmodule Duet.Duetflow do
             name: name,
             enabled: Map.get(e, "enabled", true),
             command: Map.get(e, "command", "codex app-server"),
-            prompt: Map.get(e, "prompt", "")
+            role: Map.get(e, "role", "")
           }
 
           {:cont, {:ok, acc ++ [entry]}}

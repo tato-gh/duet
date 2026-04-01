@@ -27,14 +27,11 @@ erpc_channel:
   - name: "review"
     enabled: true
     command: "codex app-server"
-    prompt: |
-      あなたはコードレビュアーです。
-      提供されたコードの問題点・改善点を具体的に指摘してください。
+    # role を省略すると初回ターンに何も付与しない
+    role: "コードレビュアー"
 
   - name: "summary"
     enabled: true
     command: "codex app-server"
-    prompt: |
-      あなたは要約担当です。
-      与えられた内容を簡潔にまとめてください。
+    role: "要約担当"
 ---

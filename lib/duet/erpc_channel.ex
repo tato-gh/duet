@@ -13,6 +13,19 @@ defmodule Duet.ErpcChannel do
   @timeout 300_000
 
   @doc """
+  起動中のエントリ一覧を返す。
+
+  Returns `[%{name: name, role: role}]`.
+  """
+  def entries do
+    Registry.select(Duet.ErpcChannel.Registry, [{{:"$1", :"$2", :_}, [], [{{:"$1", :"$2"}}]}])
+    |> Enum.map(fn {name, pid} ->
+      role = GenServer.call(pid, :get_role)
+      %{name: name, role: role}
+    end)
+  end
+
+  @doc """
   指定したエントリにプロンプトを送信し、LLM レスポンスを返す。
 
   - `entry_name` : erpc_channel エントリの name（文字列）

@@ -84,7 +84,7 @@ defmodule Duet.DuetflowTest do
         - name: "review"
           enabled: true
           command: "codex app-server"
-          prompt: "review prompt"
+          role: "コードレビュアー"
         - name: "summary"
       ---
       """)
@@ -95,10 +95,10 @@ defmodule Duet.DuetflowTest do
     assert review.name == "review"
     assert review.enabled == true
     assert review.command == "codex app-server"
-    assert review.prompt == "review prompt"
+    assert review.role == "コードレビュアー"
     assert summary.name == "summary"
     assert summary.enabled == true
-    assert summary.prompt == ""
+    assert summary.role == ""
   end
 
   test "parse/1 returns error on duplicate erpc_channel names" do

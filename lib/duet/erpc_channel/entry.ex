@@ -17,8 +17,8 @@ defmodule Duet.ErpcChannel.Entry do
   #   status:               :starting | :initializing | :session_ready | :idle | :waiting
   #   rpc_id:               次に使う JSON-RPC id
   #   pending_method:       直前に送ったリクエストの種別
-  #   prompt:               エントリのシステムプロンプト
-  #   first_turn:           true なら次の turn/start に prompt を付与
+  #   role:                 エントリの役割（初回ターンのみ付与。空文字なら付与しない）
+  #   first_turn:           true なら次の turn/start に role を付与
   #   buf:                  line モードで noeol チャンクを蓄積するバッファ
   #   response_buf:         LLM レスポンスを蓄積するバッファ
   #   pending_call:         {from} — post/2 の呼び出し元（turn 完了時に reply する）
@@ -43,7 +43,7 @@ defmodule Duet.ErpcChannel.Entry do
   # --- Callbacks ---
 
   @impl true
-  def init(%{name: name, command: command, prompt: prompt}) do
+  def init(%{name: name, command: command, role: role}) do
     cwd = Duet.Duetflow.duetflow_file_path() |> Path.dirname()
     port = start_app_server(command, cwd)
 
@@ -55,7 +55,7 @@ defmodule Duet.ErpcChannel.Entry do
       status: :starting,
       rpc_id: 1,
       pending_method: nil,
-      prompt: prompt,
+      role: role,
       first_turn: true,
       buf: "",
       response_buf: "",
@@ -64,6 +64,11 @@ defmodule Duet.ErpcChannel.Entry do
 
     send(self(), :do_initialize)
     {:ok, state}
+  end
+
+  @impl true
+  def handle_call(:get_role, _from, state) do
+    {:reply, state.role, state}
   end
 
   # erpc クライアントからの post 呼び出し
@@ -296,17 +301,8 @@ defmodule Duet.ErpcChannel.Entry do
 
   # --- Private: Helpers ---
 
-  @meta_prompt "You are an AI assistant. Respond to the user's request clearly and concisely."
-
-  defp build_turn_input(%{first_turn: true, prompt: sys_prompt}, user_prompt) do
-    header =
-      if is_binary(sys_prompt) and sys_prompt != "" do
-        @meta_prompt <> "\n\n" <> sys_prompt
-      else
-        @meta_prompt
-      end
-
-    [%{type: "text", text: header <> "\n\n" <> user_prompt}]
+  defp build_turn_input(%{first_turn: true, role: role}, user_prompt) when role != "" do
+    [%{type: "text", text: "あなたのroleは#{role}です。\n\n#{user_prompt}"}]
   end
 
   defp build_turn_input(_state, user_prompt) do

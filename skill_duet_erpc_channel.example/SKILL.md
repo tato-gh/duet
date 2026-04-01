@@ -12,13 +12,19 @@ Duet の erpc_channel モードを通じて、設定済みの AI エントリ（
 
 ## 手順
 
-### 1. 設定確認
+### 1. 利用可能なエントリ確認
 
-DUETFLOW.md を読み、`node_name` と利用可能なエントリ名を確認する。
+Duet に直接問い合わせて、エントリ名と役割（role）を取得する。
 
 ```bash
-cat DUETFLOW.md
+elixir -e "
+  Node.connect(:'NODE_NAME')
+  IO.inspect :erpc.call(:'NODE_NAME', Duet.ErpcChannel, :entries, [], 5_000)
+"
+# => [%{name: "review", role: "コードレビュアー"}, %{name: "summary", role: "要約担当"}]
 ```
+
+ノード名が不明な場合はデフォルト `duet@HOSTNAME` を試す。
 
 ### 2. 単一エントリへの問い合わせ
 
