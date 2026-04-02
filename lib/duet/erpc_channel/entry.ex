@@ -47,7 +47,14 @@ defmodule Duet.ErpcChannel.Entry do
   # --- Callbacks ---
 
   @impl true
-  def init(%{name: name, command: command, role: role}) do
+  def init(%{
+        name: name,
+        command: command,
+        role: role,
+        approval_policy: approval_policy,
+        thread_sandbox: thread_sandbox,
+        turn_sandbox_policy: turn_sandbox_policy
+      }) do
     cwd = Duet.Duetflow.duetflow_file_path() |> Path.dirname()
     port = AppServerCommon.start_app_server(command, cwd, @port_line_bytes)
 
@@ -60,6 +67,9 @@ defmodule Duet.ErpcChannel.Entry do
       rpc_id: 1,
       pending_method: nil,
       role: role,
+      approval_policy: approval_policy,
+      thread_sandbox: thread_sandbox,
+      turn_sandbox_policy: turn_sandbox_policy,
       first_turn: true,
       buf: "",
       response_buf: "",
@@ -86,8 +96,8 @@ defmodule Duet.ErpcChannel.Entry do
   def handle_call({:post, "/clear"}, from, state) do
     state =
       AppServerCommon.send_rpc(state, "thread/start", %{
-        approvalPolicy: "never",
-        sandbox: "read-only",
+        approvalPolicy: state.approval_policy,
+        sandbox: state.thread_sandbox,
         cwd: state.cwd,
         dynamicTools: []
       })
@@ -105,7 +115,8 @@ defmodule Duet.ErpcChannel.Entry do
         threadId: state.thread_id,
         input: input,
         cwd: state.cwd,
-        approvalPolicy: "never"
+        approvalPolicy: state.approval_policy,
+        sandboxPolicy: state.turn_sandbox_policy
       })
 
     {:noreply,
@@ -184,8 +195,8 @@ defmodule Duet.ErpcChannel.Entry do
 
     state =
       AppServerCommon.send_rpc(state, "thread/start", %{
-        approvalPolicy: "never",
-        sandbox: "read-only",
+        approvalPolicy: state.approval_policy,
+        sandbox: state.thread_sandbox,
         cwd: state.cwd,
         dynamicTools: []
       })

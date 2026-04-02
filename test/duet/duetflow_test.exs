@@ -42,7 +42,12 @@ defmodule Duet.DuetflowTest do
         command: "codex custom"
         poll_interval: 500
         include_untracked: true
-        file_change_approval: "approve"
+        approval_policy: "on-request"
+        thread_sandbox: "workspace-write"
+        turn_sandbox_policy:
+          type: "workspaceWrite"
+          writableRoots: ["/tmp/example"]
+          networkAccess: false
         prompt: "review this diff"
       ---
       """)
@@ -53,7 +58,15 @@ defmodule Duet.DuetflowTest do
     assert dw.command == "codex custom"
     assert dw.poll_interval == 500
     assert dw.include_untracked == true
-    assert dw.file_change_approval == "approve"
+    assert dw.approval_policy == "on-request"
+    assert dw.thread_sandbox == "workspace-write"
+
+    assert dw.turn_sandbox_policy == %{
+             "type" => "workspaceWrite",
+             "writableRoots" => ["/tmp/example"],
+             "networkAccess" => false
+           }
+
     assert dw.prompt == "review this diff"
   end
 
@@ -72,7 +85,11 @@ defmodule Duet.DuetflowTest do
     assert dw.diff_command == "git diff HEAD"
     assert dw.poll_interval == 1000
     assert dw.include_untracked == false
-    assert dw.file_change_approval == "reject"
+
+    assert dw.approval_policy == "never"
+
+    assert dw.thread_sandbox == "read-only"
+    assert dw.turn_sandbox_policy == %{"type" => "readOnly", "networkAccess" => false}
     assert dw.prompt == ""
   end
 
@@ -85,6 +102,12 @@ defmodule Duet.DuetflowTest do
           enabled: true
           command: "codex app-server"
           role: "コードレビュアー"
+          approval_policy: "never"
+          thread_sandbox: "workspace-write"
+          turn_sandbox_policy:
+            type: "workspaceWrite"
+            writableRoots: ["/tmp/review"]
+            networkAccess: false
         - name: "summary"
       ---
       """)
@@ -96,9 +119,23 @@ defmodule Duet.DuetflowTest do
     assert review.enabled == true
     assert review.command == "codex app-server"
     assert review.role == "コードレビュアー"
+    assert review.approval_policy == "never"
+    assert review.thread_sandbox == "workspace-write"
+
+    assert review.turn_sandbox_policy == %{
+             "type" => "workspaceWrite",
+             "writableRoots" => ["/tmp/review"],
+             "networkAccess" => false
+           }
+
     assert summary.name == "summary"
     assert summary.enabled == true
     assert summary.role == ""
+
+    assert summary.approval_policy == "never"
+
+    assert summary.thread_sandbox == "read-only"
+    assert summary.turn_sandbox_policy == %{"type" => "readOnly", "networkAccess" => false}
   end
 
   test "parse/1 returns error on duplicate erpc_channel names" do

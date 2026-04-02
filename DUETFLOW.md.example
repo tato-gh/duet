@@ -14,11 +14,19 @@ diff_watch:
   poll_interval: 1000
   # 未追跡ファイルを差分に含めるか
   include_untracked: false
-  # ファイル変更の承認ポリシー: "reject" | "acceptForSession"
-  file_change_approval: "reject"
+  # 承認ポリシー（string または object）
+  # デフォルトは "never"（全操作を自動承認）
+  # 例: "never" | "on-request" | "on-failure" | "untrusted" | {"granular": {...}}
+  approval_policy: "never"
+  # thread/start の sandbox
+  # read-only | workspace-write | danger-full-access
+  thread_sandbox: "read-only"
+  # turn/start の sandboxPolicy（明示指定）
+  turn_sandbox_policy:
+    type: "readOnly"
+    networkAccess: false
   # diff_watch モードのシステムプロンプト
   prompt: |
-    あなたはペアプログラマーです。
     ファイルの変更を見て、気軽に一言コメントしてください。
 
 # erpc 経由で AI と対話するモード（Mode B）
@@ -29,9 +37,20 @@ erpc_channel:
     command: "codex app-server"
     # role を省略すると初回ターンに何も付与しない
     role: "ポジティブでハイテンションな雑談相手"
+    approval_policy: "never"
+    thread_sandbox: "read-only"
+    turn_sandbox_policy:
+      type: "readOnly"
+      networkAccess: false
 
   - name: "negative"
     enabled: true
     command: "codex app-server"
     role: "ネガティブでローテンションな雑談相手"
+    # sessionベース承認フローを使う設定例
+    approval_policy: "never"
+    thread_sandbox: "workspace-write"
+    turn_sandbox_policy:
+      type: "workspaceWrite"
+      networkAccess: true
 ---

@@ -9,8 +9,22 @@ defmodule Duet.Duetflow do
     diff_command: "git diff HEAD",
     poll_interval: 1000,
     include_untracked: false,
-    file_change_approval: "reject",
+    approval_policy: "never",
+    thread_sandbox: "read-only",
+    turn_sandbox_policy: %{
+      "type" => "readOnly",
+      "networkAccess" => false
+    },
     prompt: ""
+  }
+
+  @default_erpc_channel %{
+    enabled: true,
+    command: "codex app-server",
+    role: "",
+    approval_policy: @default_diff_watch.approval_policy,
+    thread_sandbox: @default_diff_watch.thread_sandbox,
+    turn_sandbox_policy: @default_diff_watch.turn_sandbox_policy
   }
 
   def duetflow_file_path do
@@ -68,8 +82,10 @@ defmodule Duet.Duetflow do
       diff_command: Map.get(dw, "diff_command", @default_diff_watch.diff_command),
       poll_interval: Map.get(dw, "poll_interval", @default_diff_watch.poll_interval),
       include_untracked: Map.get(dw, "include_untracked", @default_diff_watch.include_untracked),
-      file_change_approval:
-        Map.get(dw, "file_change_approval", @default_diff_watch.file_change_approval),
+      approval_policy: Map.get(dw, "approval_policy", @default_diff_watch.approval_policy),
+      thread_sandbox: Map.get(dw, "thread_sandbox", @default_diff_watch.thread_sandbox),
+      turn_sandbox_policy:
+        Map.get(dw, "turn_sandbox_policy", @default_diff_watch.turn_sandbox_policy),
       prompt: Map.get(dw, "prompt", "")
     }
   end
@@ -82,9 +98,13 @@ defmodule Duet.Duetflow do
         {:ok, name} ->
           entry = %{
             name: name,
-            enabled: Map.get(e, "enabled", true),
-            command: Map.get(e, "command", "codex app-server"),
-            role: Map.get(e, "role", "")
+            enabled: Map.get(e, "enabled", @default_erpc_channel.enabled),
+            command: Map.get(e, "command", @default_erpc_channel.command),
+            role: Map.get(e, "role", @default_erpc_channel.role),
+            approval_policy: Map.get(e, "approval_policy", @default_erpc_channel.approval_policy),
+            thread_sandbox: Map.get(e, "thread_sandbox", @default_erpc_channel.thread_sandbox),
+            turn_sandbox_policy:
+              Map.get(e, "turn_sandbox_policy", @default_erpc_channel.turn_sandbox_policy)
           }
 
           {:cont, {:ok, acc ++ [entry]}}

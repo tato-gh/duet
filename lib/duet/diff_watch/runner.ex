@@ -23,7 +23,9 @@ defmodule Duet.DiffWatch.Runner do
   #   pending_user_input:   ユーザーが標準入力から送った直接メッセージ（nil = なし）
   #   prompt:               現在の DUETFLOW.md プロンプト本文
   #   first_turn:           true なら次の turn/start に prompt を付与
-  #   file_change_approval: ファイル変更承認ポリシー
+  #   approval_policy:      app-server 承認ポリシー
+  #   thread_sandbox:       thread/start に渡す sandbox
+  #   turn_sandbox_policy:  turn/start に渡す sandboxPolicy
   #   buf:                  line モードで noeol チャンクを蓄積するバッファ
 
   # --- Public API ---
@@ -53,7 +55,9 @@ defmodule Duet.DiffWatch.Runner do
       pending_user_input: nil,
       prompt: nil,
       first_turn: true,
-      file_change_approval: config.file_change_approval,
+      approval_policy: config.approval_policy,
+      thread_sandbox: config.thread_sandbox,
+      turn_sandbox_policy: config.turn_sandbox_policy,
       buf: ""
     }
 
@@ -155,8 +159,8 @@ defmodule Duet.DiffWatch.Runner do
 
     state =
       AppServerCommon.send_rpc(state, "thread/start", %{
-        approvalPolicy: "never",
-        sandbox: "read-only",
+        approvalPolicy: state.approval_policy,
+        sandbox: state.thread_sandbox,
         cwd: state.cwd,
         dynamicTools: []
       })
@@ -217,7 +221,7 @@ defmodule Duet.DiffWatch.Runner do
   end
 
   defp handle_notification("item/fileChange/requestApproval", params, state) do
-    AppServerCommon.send_response(state, params["id"], %{decision: state.file_change_approval})
+    AppServerCommon.send_response(state, params["id"], %{decision: "reject"})
     state
   end
 
@@ -276,8 +280,8 @@ defmodule Duet.DiffWatch.Runner do
   defp flush_pending(%{pending_reset: true} = state) do
     state =
       AppServerCommon.send_rpc(state, "thread/start", %{
-        approvalPolicy: "never",
-        sandbox: "read-only",
+        approvalPolicy: state.approval_policy,
+        sandbox: state.thread_sandbox,
         cwd: state.cwd,
         dynamicTools: []
       })
@@ -293,7 +297,8 @@ defmodule Duet.DiffWatch.Runner do
         threadId: state.thread_id,
         input: [%{type: "text", text: text}],
         cwd: state.cwd,
-        approvalPolicy: "never"
+        approvalPolicy: state.approval_policy,
+        sandboxPolicy: state.turn_sandbox_policy
       })
 
     %{state | pending_user_input: nil, status: :waiting, pending_method: :turn_start}
@@ -307,7 +312,8 @@ defmodule Duet.DiffWatch.Runner do
         threadId: state.thread_id,
         input: build_turn_input(state),
         cwd: state.cwd,
-        approvalPolicy: "never"
+        approvalPolicy: state.approval_policy,
+        sandboxPolicy: state.turn_sandbox_policy
       })
 
     %{

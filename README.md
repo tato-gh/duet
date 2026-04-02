@@ -131,7 +131,9 @@ claude "duetを使って会話を数回して"
 | `diff_command` | `git diff HEAD` | diff 取得コマンド（`DUETFLOW.md` は常に除外） |
 | `poll_interval` | `1000` | ポーリング間隔（ms） |
 | `include_untracked` | `false` | untracked を diff に含めるか |
-| `file_change_approval` | `reject` | ファイル変更承認ポリシー（`reject` / `acceptForSession`） |
+| `approval_policy` | `"never"` | app-server の承認ポリシー（string または object） |
+| `thread_sandbox` | `read-only` | `thread/start` に渡す sandbox |
+| `turn_sandbox_policy` | `{"type":"readOnly","networkAccess":false}` | `turn/start` に渡す sandboxPolicy |
 | `prompt` | `""` | diff_watch 用システムプロンプト |
 
 `erpc_channel`（Mode B）:
@@ -144,6 +146,9 @@ claude "duetを使って会話を数回して"
 | `enabled` | `true` | エントリ有効/無効 |
 | `command` | `codex app-server` | app-server 起動コマンド |
 | `role` | `""` | 初回ターン時に付与するロール文 |
+| `approval_policy` | `"never"` | app-server の承認ポリシー（string または object） |
+| `thread_sandbox` | `read-only` | `thread/start` に渡す sandbox |
+| `turn_sandbox_policy` | `{"type":"readOnly","networkAccess":false}` | `turn/start` に渡す sandboxPolicy |
 
 サンプルは `DUETFLOW.md.example` を参照してください。
 
