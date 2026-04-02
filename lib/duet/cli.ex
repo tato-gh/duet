@@ -29,7 +29,7 @@ defmodule Duet.CLI do
          :ok <- start_node(config.node_name),
          {:ok, _} <- Application.ensure_all_started(:phoenix_pubsub),
          {:ok, _pid} <- Duet.Application.start(:normal, []) do
-      spawn_link(fn -> read_stdin() end)
+      maybe_start_stdin_reader(config)
       :ok
     else
       {:error, reason} ->
@@ -90,6 +90,13 @@ defmodule Duet.CLI do
       _other -> do_wait(ref, pid)
     end
   end
+
+  defp maybe_start_stdin_reader(%{diff_watch: %{enabled: true}}) do
+    spawn_link(fn -> read_stdin() end)
+    :ok
+  end
+
+  defp maybe_start_stdin_reader(_), do: :ok
 
   defp read_stdin do
     case IO.gets("") do
