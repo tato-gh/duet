@@ -10,7 +10,8 @@ defmodule Duet.ErpcChannel do
       "
   """
 
-  @timeout 300_000
+  # 10分
+  @timeout 600_000
 
   @doc """
   起動中のエントリ一覧を返す。
