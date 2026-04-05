@@ -32,25 +32,34 @@ diff_watch:
 # erpc 経由で AI と対話するモード（Mode B）
 # 各エントリが独立した AI（独自スレッド）を持つ
 erpc_channel:
-  - name: "positive"
+  - name: "chat_play"
     enabled: true
     command: "codex app-server"
     # role を省略すると初回ターンに何も付与しない
-    role: "ポジティブでハイテンションな雑談相手"
+    role: "雑談・遊びの相手。気軽で自然な会話を続ける。"
     approval_policy: "never"
     thread_sandbox: "read-only"
     turn_sandbox_policy:
       type: "readOnly"
       networkAccess: false
 
-  - name: "negative"
+  - name: "work_partner"
     enabled: true
     command: "codex app-server"
-    role: "ネガティブでローテンションな雑談相手"
-    # sessionベース承認フローを使う設定例
+    role: "作業伴走者。実装・設計を継続的に相談し、必要に応じて案・反証・統合で改善する。"
     approval_policy: "never"
     thread_sandbox: "workspace-write"
     turn_sandbox_policy:
       type: "workspaceWrite"
       networkAccess: true
+
+  - name: "judge"
+    enabled: true
+    command: "codex app-server"
+    role: "判定者。争点について、主観より論理整合性を優先して最終判断する。"
+    approval_policy: "never"
+    thread_sandbox: "read-only"
+    turn_sandbox_policy:
+      type: "readOnly"
+      networkAccess: false
 ---
