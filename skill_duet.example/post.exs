@@ -37,7 +37,7 @@ case System.argv() do
 
     case :erpc.call(node, Duet.ErpcChannel, :post, [entry_name, prompt], 300_000) do
       {:ok, response} ->
-        IO.puts(response)
+        IO.binwrite(:stdio, response <> "\n")
 
       {:error, reason} ->
         IO.puts(:stderr, "Error: #{inspect(reason)}")

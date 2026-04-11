@@ -3,6 +3,8 @@ defmodule Duet.CLI do
   @usage_message "Usage: duet <path-to-DUETFLOW.md | project-dir>"
 
   def main(args) do
+    :io.setopts(:user, encoding: :unicode)
+
     case evaluate(args) do
       :ok ->
         wait_for_shutdown()
@@ -112,6 +114,9 @@ defmodule Duet.CLI do
         cond do
           text == "/clear" ->
             Phoenix.PubSub.broadcast(Duet.PubSub, "duet:events", {:user_clear, %{}})
+
+          text == "/compact" ->
+            Phoenix.PubSub.broadcast(Duet.PubSub, "duet:events", {:user_compact, %{}})
 
           text != "" ->
             Phoenix.PubSub.broadcast(Duet.PubSub, "duet:events", {:user_message, %{text: text}})

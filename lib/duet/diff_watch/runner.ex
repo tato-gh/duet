@@ -12,21 +12,25 @@ defmodule Duet.DiffWatch.Runner do
   @non_interactive_answer "This is a non-interactive session. Operator input is unavailable."
 
   # state:
-  #   port:                 app-server の OS プロセスポート
-  #   cwd:                  DUETFLOW.md があるディレクトリ
-  #   thread_id:            thread/start レスポンスで得た UUID（nil = セッション未確立）
-  #   status:               :starting | :initializing | :session_ready | :idle | :waiting
-  #   rpc_id:               次に使う JSON-RPC id
-  #   pending_method:       直前に送ったリクエストの種別
-  #   pending_delta:        次のポーリング後に送るべき diff（nil = なし）
-  #   pending_reset:        true なら turn 完了後に thread/start でコンテキストリセット
-  #   pending_user_input:   ユーザーが標準入力から送った直接メッセージ（nil = なし）
-  #   prompt:               現在の DUETFLOW.md プロンプト本文
-  #   first_turn:           true なら次の turn/start に prompt を付与
-  #   approval_policy:      app-server 承認ポリシー
-  #   thread_sandbox:       thread/start に渡す sandbox
-  #   turn_sandbox_policy:  turn/start に渡す sandboxPolicy
-  #   buf:                  line モードで noeol チャンクを蓄積するバッファ
+  #   port:                    app-server の OS プロセスポート
+  #   cwd:                     DUETFLOW.md があるディレクトリ
+  #   thread_id:               thread/start レスポンスで得た UUID（nil = セッション未確立）
+  #   status:                  :starting | :initializing | :session_ready | :idle | :waiting | :compacting_summary
+  #   rpc_id:                  次に使う JSON-RPC id
+  #   pending_method:          直前に送ったリクエストの種別
+  #   pending_delta:           次のポーリング後に送るべき diff（nil = なし）
+  #   pending_reset:           true なら turn 完了後に thread/start でコンテキストリセット
+  #   pending_user_input:      ユーザーが標準入力から送った直接メッセージ（nil = なし）
+  #   prompt:                  現在の DUETFLOW.md プロンプト本文
+  #   first_turn:              true なら次の turn/start に prompt を付与
+  #   approval_policy:         app-server 承認ポリシー
+  #   thread_sandbox:          thread/start に渡す sandbox
+  #   turn_sandbox_policy:     turn/start に渡す sandboxPolicy
+  #   buf:                     line モードで noeol チャンクを蓄積するバッファ
+  #   response_buf:            /compact 時の LLM レスポンスを蓄積するバッファ
+  #   pending_compact_summary: /compact 時の要約テキスト（thread/start 後の first turn に付与）
+
+  @meta_prompt "You are a partner to the user. The user sends messages to you via git diff output as the communication medium. Just respond directly and naturally — no need to treat this as a file editing task."
 
   # --- Public API ---
 
@@ -58,7 +62,9 @@ defmodule Duet.DiffWatch.Runner do
       approval_policy: config.approval_policy,
       thread_sandbox: config.thread_sandbox,
       turn_sandbox_policy: config.turn_sandbox_policy,
-      buf: ""
+      buf: "",
+      response_buf: "",
+      pending_compact_summary: nil
     }
 
     send(self(), :do_initialize)
@@ -127,6 +133,26 @@ defmodule Duet.DiffWatch.Runner do
   end
 
   @impl true
+  def handle_info({:user_compact, _}, %{status: :idle} = state) do
+    state =
+      AppServerCommon.send_rpc(state, "turn/start", %{
+        threadId: state.thread_id,
+        input: [%{type: "text", text: build_compact_summary_prompt()}],
+        cwd: state.cwd,
+        approvalPolicy: state.approval_policy,
+        sandboxPolicy: state.turn_sandbox_policy
+      })
+
+    {:noreply, %{state | status: :compacting_summary, pending_method: :turn_start, response_buf: ""}}
+  end
+
+  @impl true
+  def handle_info({:user_compact, _}, state) do
+    Logger.warning("[DiffWatch.Runner] /compact received but status=#{state.status}, ignoring")
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({:user_message, %{text: text}}, state) do
     {:noreply, %{state | pending_user_input: text} |> maybe_flush()}
   end
@@ -168,6 +194,30 @@ defmodule Duet.DiffWatch.Runner do
     %{state | status: :session_ready, pending_method: :thread_start}
   end
 
+  defp handle_response(_id, result, %{pending_method: :thread_start, pending_compact_summary: summary} = state)
+       when is_binary(summary) and summary != "" do
+    thread_id = get_in(result, ["thread", "id"])
+    Logger.info("[DiffWatch.Runner] /compact: new thread #{thread_id} established, sending summary as first turn")
+
+    input =
+      if is_binary(state.prompt) and state.prompt != "" do
+        [%{type: "text", text: @meta_prompt <> "\n\n" <> state.prompt <> "\n\n" <> summary}]
+      else
+        [%{type: "text", text: @meta_prompt <> "\n\n" <> summary}]
+      end
+
+    state =
+      AppServerCommon.send_rpc(%{state | thread_id: thread_id}, "turn/start", %{
+        threadId: thread_id,
+        input: input,
+        cwd: state.cwd,
+        approvalPolicy: state.approval_policy,
+        sandboxPolicy: state.turn_sandbox_policy
+      })
+
+    %{state | thread_id: thread_id, status: :waiting, pending_method: :turn_start, first_turn: false, pending_compact_summary: nil}
+  end
+
   defp handle_response(_id, result, %{pending_method: :thread_start} = state) do
     thread_id = get_in(result, ["thread", "id"])
     state = %{state | thread_id: thread_id, status: :idle, pending_method: nil, first_turn: true}
@@ -185,17 +235,44 @@ defmodule Duet.DiffWatch.Runner do
     state
   end
 
+  defp handle_notification("turn/completed", params, %{status: :compacting_summary} = state) do
+    case get_in(params, ["turn", "status"]) do
+      s when s in ["failed", "interrupted"] ->
+        Logger.error("[DiffWatch.Runner] compact summary turn ended with status: #{s}")
+        %{state | status: :idle, pending_method: nil, response_buf: ""}
+
+      _ ->
+        summary = String.trim(state.response_buf)
+        Logger.info("[DiffWatch.Runner] /compact: summary captured (#{String.length(summary)} chars), sending thread/start")
+
+        state =
+          AppServerCommon.send_rpc(state, "thread/start", %{
+            approvalPolicy: state.approval_policy,
+            sandbox: state.thread_sandbox,
+            cwd: state.cwd,
+            dynamicTools: []
+          })
+
+        %{state | status: :session_ready, pending_method: :thread_start, pending_compact_summary: summary, response_buf: ""}
+    end
+  end
+
   defp handle_notification("turn/completed", params, state) do
     case get_in(params, ["turn", "status"]) do
       s when s in ["failed", "interrupted"] ->
         Logger.error("Turn ended with status: #{s}")
 
       _ ->
-        IO.puts("")
+        IO.write("\n")
     end
 
     state = %{state | status: :idle, pending_method: nil}
     flush_pending(state)
+  end
+
+  defp handle_notification("item/agentMessage/delta", params, %{status: :compacting_summary} = state) do
+    delta = params["delta"] || ""
+    %{state | response_buf: state.response_buf <> delta}
   end
 
   defp handle_notification("item/agentMessage/delta", params, state) do
@@ -290,7 +367,7 @@ defmodule Duet.DiffWatch.Runner do
   end
 
   defp flush_pending(%{pending_user_input: text} = state) when not is_nil(text) do
-    IO.puts("\n---\n")
+    IO.write("\n---\n")
 
     state =
       AppServerCommon.send_rpc(state, "turn/start", %{
@@ -305,7 +382,7 @@ defmodule Duet.DiffWatch.Runner do
   end
 
   defp flush_pending(%{pending_delta: delta} = state) when not is_nil(delta) do
-    IO.puts("\n---\n")
+    IO.write("\n---\n")
 
     state =
       AppServerCommon.send_rpc(state, "turn/start", %{
@@ -327,7 +404,14 @@ defmodule Duet.DiffWatch.Runner do
 
   defp flush_pending(state), do: %{state | status: :idle}
 
-  @meta_prompt "You are a partner to the user. The user sends messages to you via git diff output as the communication medium. Just respond directly and naturally — no need to treat this as a file editing task."
+  defp build_compact_summary_prompt do
+    """
+    別のLLMインスタンスに引き継ぎます。引き継ぎ文章を出力してください。
+    決定事項、作業の現状、未解決の課題、重要なコードや情報を含めてください。
+    要約のみを出力し、それ以外のコメントは不要です。
+    """
+    |> String.trim()
+  end
 
   defp build_turn_input(%{first_turn: true, prompt: prompt, pending_delta: delta}) do
     header =
