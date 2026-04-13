@@ -4,14 +4,17 @@ defmodule Duet.AppServerCommon do
   require Logger
 
   @error_like ~r/\b(error|warn|warning|failed|fatal|panic|exception)\b/i
+  @utf8_locale "C.UTF-8"
 
   def decode_and_process(line, state, process_fun, log_prefix) when is_function(process_fun, 2) do
+    normalized = normalize_utf8(line)
+
     try do
-      msg = JSON.decode!(line)
+      msg = JSON.decode!(normalized)
       process_fun.(msg, state)
     rescue
       _ ->
-        log_non_json(log_prefix, line)
+        log_non_json(log_prefix, normalized)
         state
     end
   end
@@ -43,6 +46,7 @@ defmodule Duet.AppServerCommon do
         :stderr_to_stdout,
         args: [~c"-lc", String.to_charlist(command)],
         cd: String.to_charlist(cwd),
+        env: [{~c"LANG", String.to_charlist(@utf8_locale)}, {~c"LC_ALL", String.to_charlist(@utf8_locale)}],
         line: line_bytes
       ]
     )
@@ -91,6 +95,13 @@ defmodule Duet.AppServerCommon do
       else
         Logger.debug(message)
       end
+    end
+  end
+
+  defp normalize_utf8(line) when is_binary(line) do
+    case String.valid?(line) do
+      true -> line
+      false -> :unicode.characters_to_binary(line, :latin1, :utf8)
     end
   end
 end
