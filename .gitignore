@@ -22,7 +22,8 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 duet-*.tar
 
-/bin/
+/bin/*
+!/bin/duet
 
 .claude/skills/
 .codex/skills/

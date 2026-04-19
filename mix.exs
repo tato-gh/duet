@@ -39,7 +39,7 @@ defmodule Duet.MixProject do
     [
       main_module: Duet.CLI,
       name: "duet",
-      path: "bin/duet"
+      path: "bin/duet.escript"
     ]
   end
 end

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+ESCRIPT_PATH="${SCRIPT_DIR}/duet.escript"
+
+if [[ ! -x "${ESCRIPT_PATH}" ]]; then
+  echo "duet escript not found: ${ESCRIPT_PATH}" >&2
+  echo "Run: cd ${PROJECT_ROOT} && mix escript.build" >&2
+  exit 1
+fi
+
+if command -v mise >/dev/null 2>&1; then
+  exec env DUET_CALLER_CWD="${PWD}" mise x --cd "${PROJECT_ROOT}" -- escript "${ESCRIPT_PATH}" "$@"
+fi
+
+if [[ -n "${DUET_ESCRIPT:-}" ]]; then
+  exec env DUET_CALLER_CWD="${PWD}" "${DUET_ESCRIPT}" "${ESCRIPT_PATH}" "$@"
+fi
+
+exec env DUET_CALLER_CWD="${PWD}" escript "${ESCRIPT_PATH}" "$@"

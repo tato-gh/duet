@@ -46,7 +46,10 @@ defmodule Duet.AppServerCommon do
         :stderr_to_stdout,
         args: [~c"-lc", String.to_charlist(command)],
         cd: String.to_charlist(cwd),
-        env: [{~c"LANG", String.to_charlist(@utf8_locale)}, {~c"LC_ALL", String.to_charlist(@utf8_locale)}],
+        env: [
+          {~c"LANG", String.to_charlist(@utf8_locale)},
+          {~c"LC_ALL", String.to_charlist(@utf8_locale)}
+        ],
         line: line_bytes
       ]
     )

@@ -143,7 +143,8 @@ defmodule Duet.DiffWatch.Runner do
         sandboxPolicy: state.turn_sandbox_policy
       })
 
-    {:noreply, %{state | status: :compacting_summary, pending_method: :turn_start, response_buf: ""}}
+    {:noreply,
+     %{state | status: :compacting_summary, pending_method: :turn_start, response_buf: ""}}
   end
 
   @impl true
@@ -194,10 +195,17 @@ defmodule Duet.DiffWatch.Runner do
     %{state | status: :session_ready, pending_method: :thread_start}
   end
 
-  defp handle_response(_id, result, %{pending_method: :thread_start, pending_compact_summary: summary} = state)
+  defp handle_response(
+         _id,
+         result,
+         %{pending_method: :thread_start, pending_compact_summary: summary} = state
+       )
        when is_binary(summary) and summary != "" do
     thread_id = get_in(result, ["thread", "id"])
-    Logger.info("[DiffWatch.Runner] /compact: new thread #{thread_id} established, sending summary as first turn")
+
+    Logger.info(
+      "[DiffWatch.Runner] /compact: new thread #{thread_id} established, sending summary as first turn"
+    )
 
     input =
       if is_binary(state.prompt) and state.prompt != "" do
@@ -215,7 +223,14 @@ defmodule Duet.DiffWatch.Runner do
         sandboxPolicy: state.turn_sandbox_policy
       })
 
-    %{state | thread_id: thread_id, status: :waiting, pending_method: :turn_start, first_turn: false, pending_compact_summary: nil}
+    %{
+      state
+      | thread_id: thread_id,
+        status: :waiting,
+        pending_method: :turn_start,
+        first_turn: false,
+        pending_compact_summary: nil
+    }
   end
 
   defp handle_response(_id, result, %{pending_method: :thread_start} = state) do
@@ -243,7 +258,10 @@ defmodule Duet.DiffWatch.Runner do
 
       _ ->
         summary = String.trim(state.response_buf)
-        Logger.info("[DiffWatch.Runner] /compact: summary captured (#{String.length(summary)} chars), sending thread/start")
+
+        Logger.info(
+          "[DiffWatch.Runner] /compact: summary captured (#{String.length(summary)} chars), sending thread/start"
+        )
 
         state =
           AppServerCommon.send_rpc(state, "thread/start", %{
@@ -253,7 +271,13 @@ defmodule Duet.DiffWatch.Runner do
             dynamicTools: []
           })
 
-        %{state | status: :session_ready, pending_method: :thread_start, pending_compact_summary: summary, response_buf: ""}
+        %{
+          state
+          | status: :session_ready,
+            pending_method: :thread_start,
+            pending_compact_summary: summary,
+            response_buf: ""
+        }
     end
   end
 
@@ -270,7 +294,11 @@ defmodule Duet.DiffWatch.Runner do
     flush_pending(state)
   end
 
-  defp handle_notification("item/agentMessage/delta", params, %{status: :compacting_summary} = state) do
+  defp handle_notification(
+         "item/agentMessage/delta",
+         params,
+         %{status: :compacting_summary} = state
+       ) do
     delta = params["delta"] || ""
     %{state | response_buf: state.response_buf <> delta}
   end

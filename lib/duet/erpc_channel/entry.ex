@@ -120,7 +120,13 @@ defmodule Duet.ErpcChannel.Entry do
       })
 
     {:noreply,
-     %{state | status: :compacting_summary, pending_method: :turn_start, pending_call: from, response_buf: ""}}
+     %{
+       state
+       | status: :compacting_summary,
+         pending_method: :turn_start,
+         pending_call: from,
+         response_buf: ""
+     }}
   end
 
   @impl true
@@ -221,10 +227,18 @@ defmodule Duet.ErpcChannel.Entry do
     %{state | status: :session_ready, pending_method: :thread_start}
   end
 
-  defp handle_response(_id, result, %{pending_method: :thread_start, pending_compact_summary: summary} = state)
+  defp handle_response(
+         _id,
+         result,
+         %{pending_method: :thread_start, pending_compact_summary: summary} = state
+       )
        when is_binary(summary) and summary != "" do
     thread_id = get_in(result, ["thread", "id"])
-    Logger.info("[ErpcChannel.Entry:#{state.name}] /compact: new thread #{thread_id} established, sending summary as first turn")
+
+    Logger.info(
+      "[ErpcChannel.Entry:#{state.name}] /compact: new thread #{thread_id} established, sending summary as first turn"
+    )
+
     state_with_new_thread = %{state | thread_id: thread_id, first_turn: true}
     input = build_turn_input(state_with_new_thread, summary)
 
@@ -268,7 +282,9 @@ defmodule Duet.ErpcChannel.Entry do
   defp handle_notification("turn/completed", params, %{status: :compacting_summary} = state) do
     case get_in(params, ["turn", "status"]) do
       s when s in ["failed", "interrupted"] ->
-        Logger.error("[ErpcChannel.Entry:#{state.name}] compact summary turn ended with status: #{s}")
+        Logger.error(
+          "[ErpcChannel.Entry:#{state.name}] compact summary turn ended with status: #{s}"
+        )
 
         if state.pending_call do
           GenServer.reply(state.pending_call, {:error, s})
@@ -278,7 +294,10 @@ defmodule Duet.ErpcChannel.Entry do
 
       _ ->
         summary = String.trim(state.response_buf)
-        Logger.info("[ErpcChannel.Entry:#{state.name}] /compact: summary captured (#{String.length(summary)} chars), sending thread/start")
+
+        Logger.info(
+          "[ErpcChannel.Entry:#{state.name}] /compact: summary captured (#{String.length(summary)} chars), sending thread/start"
+        )
 
         state =
           AppServerCommon.send_rpc(state, "thread/start", %{

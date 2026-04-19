@@ -63,7 +63,14 @@ defmodule Duet.CLI do
   end
 
   defp resolve_duetflow_path(input) do
-    expanded = Path.expand(input)
+    base_dir =
+      case System.get_env("DUET_CALLER_CWD") do
+        nil -> File.cwd!()
+        "" -> File.cwd!()
+        cwd -> cwd
+      end
+
+    expanded = Path.expand(input, base_dir)
     if File.dir?(expanded), do: Path.join(expanded, "DUETFLOW.md"), else: expanded
   end
 
