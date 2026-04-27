@@ -3,7 +3,7 @@ defmodule Duet.DiffWatch.DiffSource do
   git diff の取得とフィルタ処理を担当する。
   """
 
-  @untracked_diff_command ~s(git ls-files --others --exclude-standard -- . | while IFS= read -r f; do git diff --no-index -- /dev/null "$f" 2>/dev/null; done)
+  @untracked_diff_command ~s(git ls-files -z --others --exclude-standard -- . | while IFS= read -r -d '' f; do git diff --no-index -- /dev/null "$f" 2>/dev/null; done)
 
   def run(diff_command, cwd, include_untracked) do
     {tracked, _} =

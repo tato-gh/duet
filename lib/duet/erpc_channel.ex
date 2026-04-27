@@ -20,9 +20,22 @@ defmodule Duet.ErpcChannel do
   """
   def entries do
     Registry.select(Duet.ErpcChannel.Registry, [{{:"$1", :"$2", :_}, [], [{{:"$1", :"$2"}}]}])
-    |> Enum.map(fn {name, pid} ->
-      role = GenServer.call(pid, :get_role)
-      %{name: name, role: role}
+    |> Task.async_stream(
+      fn {name, pid} ->
+        try do
+          role = GenServer.call(pid, :get_role, 1_000)
+          %{name: name, role: role}
+        catch
+          :exit, _ -> %{name: name, role: nil}
+        end
+      end,
+      timeout: 1_500,
+      on_timeout: :kill_task,
+      ordered: true
+    )
+    |> Enum.flat_map(fn
+      {:ok, entry} -> [entry]
+      _ -> []
     end)
   end
 

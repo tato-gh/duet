@@ -3,10 +3,8 @@ defmodule Duet do
 end
 
 defmodule Duet.Application do
-  use Application
   require Logger
 
-  @impl true
   def start(_type, _args) do
     path = Duet.Duetflow.duetflow_file_path()
 
@@ -40,9 +38,6 @@ defmodule Duet.Application do
         error
     end
   end
-
-  @impl true
-  def stop(_state), do: :ok
 
   defp diff_watch_children(%{diff_watch: %{enabled: true}}) do
     [Duet.DiffWatch.Supervisor]
