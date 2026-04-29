@@ -1,0 +1,21 @@
+---
+node_name: "duet"
+entries:
+  - name: "chat_play"
+    command: "codex app-server"
+    role: "雑談・遊びの相手。気軽で自然な会話を続ける。"
+    approval_policy: "never"
+    thread_sandbox: "read-only"
+    turn_sandbox_policy:
+      type: "readOnly"
+      networkAccess: false
+
+  - name: "work_partner"
+    command: "codex app-server"
+    role: "作業伴走者。実装・設計を継続的に相談し、必要に応じて案・反証・統合で改善する。"
+    approval_policy: "never"
+    thread_sandbox: "workspace-write"
+    turn_sandbox_policy:
+      type: "workspaceWrite"
+      networkAccess: true
+---
