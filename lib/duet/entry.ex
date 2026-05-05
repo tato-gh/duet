@@ -207,7 +207,7 @@ defmodule Duet.Entry do
     Logger.info("[Duet.Entry:#{state.name}] /compact: new thread #{thread_id} established")
 
     state_with_new_thread = %{state | thread_id: thread_id, first_turn: true}
-    input = build_turn_input(state_with_new_thread, summary)
+    input = build_turn_input(state_with_new_thread, build_compact_handoff_prompt(summary))
 
     state =
       AppServerCommon.send_rpc(state_with_new_thread, "turn/start", %{
@@ -280,23 +280,34 @@ defmodule Duet.Entry do
 
       _ ->
         summary = String.trim(state.response_buf)
-        Logger.info("[Duet.Entry:#{state.name}] /compact: summary captured")
 
-        state =
-          AppServerCommon.send_rpc(state, "thread/start", %{
-            approvalPolicy: state.approval_policy,
-            sandbox: state.thread_sandbox,
-            cwd: state.cwd,
-            dynamicTools: []
-          })
+        if summary == "" do
+          Logger.error("[Duet.Entry:#{state.name}] /compact: summary was empty")
 
-        %{
-          state
-          | status: :session_ready,
-            pending_method: :thread_start,
-            pending_compact_summary: summary,
-            response_buf: ""
-        }
+          if state.pending_call do
+            GenServer.reply(state.pending_call, {:error, :empty_compact_summary})
+          end
+
+          %{state | status: :idle, pending_method: nil, pending_call: nil, response_buf: ""}
+        else
+          Logger.info("[Duet.Entry:#{state.name}] /compact: summary captured")
+
+          state =
+            AppServerCommon.send_rpc(state, "thread/start", %{
+              approvalPolicy: state.approval_policy,
+              sandbox: state.thread_sandbox,
+              cwd: state.cwd,
+              dynamicTools: []
+            })
+
+          %{
+            state
+            | status: :session_ready,
+              pending_method: :thread_start,
+              pending_compact_summary: summary,
+              response_buf: ""
+          }
+        end
     end
   end
 
@@ -402,9 +413,32 @@ defmodule Duet.Entry do
 
   defp build_compact_summary_prompt do
     """
-    別のLLMインスタンスに引き継ぎます。引き継ぎ文章を出力してください。
-    決定事項、作業の現状、未解決の課題、重要なコードや情報を含めてください。
+    現在の会話を新しいスレッドへ引き継ぐため、後続のAIエージェント向けの引き継ぎメモを作成してください。
+
+    含める内容:
+    - ユーザーの目的、制約、明示された好み
+    - 決定済みの方針と、その理由
+    - 作業の現状、変更済みのファイル、確認済みの事実
+    - 未解決の課題、次に行うべきこと、注意点
+    - 重要なコード、コマンド、エラー、参照情報
+
+    憶測は事実と分けてください。不要な挨拶や前置きは避けてください。
     要約のみを出力し、それ以外のコメントは不要です。
+    """
+    |> String.trim()
+  end
+
+  defp build_compact_handoff_prompt(summary) do
+    """
+    以下は前スレッドからの引き継ぎ情報です。
+    これはユーザーからの新しい作業依頼ではなく、今後の応答で保持すべき会話文脈です。
+    内容を把握したうえで、以後この前提を引き継いでください。
+
+    <handoff>
+    #{summary}
+    </handoff>
+
+    引き継ぎ内容を短く確認してください。
     """
     |> String.trim()
   end

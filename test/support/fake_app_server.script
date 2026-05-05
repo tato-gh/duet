@@ -1,0 +1,66 @@
+log_path = System.fetch_env!("FAKE_APP_SERVER_LOG")
+summary = System.get_env("FAKE_COMPACT_SUMMARY", "引き継ぎ要約")
+handoff_response = System.get_env("FAKE_HANDOFF_RESPONSE", "引き継ぎを確認しました")
+
+append_log = fn event ->
+  File.write!(log_path, JSON.encode!(event) <> "\n", [:append])
+end
+
+send_message = fn message ->
+  IO.puts(JSON.encode!(message))
+end
+
+loop = fn loop, thread_count ->
+  case IO.read(:stdio, :line) do
+    :eof ->
+      :ok
+
+    {:error, _reason} ->
+      :ok
+
+    line ->
+      message = JSON.decode!(line)
+      append_log.(%{received: message})
+
+      case message["method"] do
+        "initialize" ->
+          send_message.(%{id: message["id"], result: %{}})
+          loop.(loop, thread_count)
+
+        "thread/start" ->
+          next_thread_count = thread_count + 1
+
+          send_message.(%{
+            id: message["id"],
+            result: %{thread: %{id: "thread-#{next_thread_count}"}}
+          })
+
+          loop.(loop, next_thread_count)
+
+        "turn/start" ->
+          text =
+            message
+            |> get_in(["params", "input"])
+            |> List.first(%{})
+            |> Map.get("text", "")
+
+          send_message.(%{id: message["id"], result: %{turn: %{id: "turn-#{message["id"]}"}}})
+
+          response =
+            if String.contains?(text, "引き継ぎメモを作成してください") do
+              summary
+            else
+              handoff_response
+            end
+
+          send_message.(%{method: "item/agentMessage/delta", params: %{delta: response}})
+          send_message.(%{method: "turn/completed", params: %{turn: %{status: "completed"}}})
+          loop.(loop, thread_count)
+
+        _ ->
+          loop.(loop, thread_count)
+      end
+  end
+end
+
+loop.(loop, 0)
