@@ -30,6 +30,12 @@ mkdir -p .claude/skills
 ln -s ~/duet/skill_duet.example .claude/skills/skill_duet
 ```
 
+`DUET.md` の整理や entry 設定の見直しも AI エージェントに任せたい場合は、設定編集用 skill も配置します。
+
+```bash
+ln -s ~/duet/skill_duet_config.example .claude/skills/skill_duet_config
+```
+
 ### 3. Duet を起動
 
 別ターミナルで起動します。
@@ -55,6 +61,8 @@ claude "duetを使って、しりとりを10ターン続けて"
 ```
 
 エージェントが `skill_duet` 経由で起動中の Duet entry に問い合わせます。
+
+`skill_duet_config` は任意です。AI エージェントに `DUET.md` の整理、entry の追加、role や権限設定の見直しを任せたいプロジェクトで配置します。
 
 ## 設定
 
