@@ -34,9 +34,23 @@ description: 「skill_duet_orchestraで進めて」「duet orchestra」「オー
 - 判断不能なときに、短い選択肢つきでユーザーへ確認する
 
 オーケストレータの役割は実装やレビューを代行することではなく、報告間の整合性を見て作業を前に進めることにある。
-報告同士が噛み合わない、Scope や Done Criteria との対応が曖昧、または状態更新が早すぎると感じる場合に限り、オーケストレータは必要なファイルや diff を読んで状況を交通整理し、worker / reviewer / scribe のどこへ戻すかを判断する。
+ticket 詳細、kanban、`git status --short` は判断材料として恒常的に確認してよい。これらを切り捨てると relay と変わらなくなり、entry 報告の妥当性判定や、ユーザーへの選択肢提示の質が落ちる。
+一方で実装本体の `git diff` 精読、ソース直読、テスト出力の精読は、entry 報告間に矛盾を感じた場合や、状態更新が早すぎると感じた場合に絞る。その閾値を超えたら、worker / reviewer / scribe のどこへ戻すかを判断する。
 
 ユーザーがこの skill の外で明示的に「直接編集して」と依頼した場合だけ、通常の Codex 作業へ切り替えてよい。
+
+## オーケストレータ自身の context
+
+duet entry には `/compact` と `/clear` を送れるが、オーケストレータ自身の context は自己圧縮できない。
+ticket 数が増えるほど、オーケストレータ側の context は単調増加する。
+
+このため、無人で多数 ticket を回すときは以下を意識する。
+
+- entry に渡す dispatch プロンプトに ticket 内容 (Goal / Scope / Done Criteria) を再掲しない。entry は ticket を直接読む
+- reviewer 指摘を worker に戻すときは要約せず原文を引用する。要約しても精度が落ちるだけで、自分の context は減らない
+- ユーザー向けの状況報告は、判断に必要な要点だけにする。長文サマリは context を浪費する
+- 実装 diff やテスト出力の精読は矛盾検出時に限る (上記の通り)
+- ticket / git status の軽い確認は維持する。判断品質を落とすほど削らない
 
 ## 管理ファイル
 
@@ -156,6 +170,9 @@ role には以下を必ず含める。
 
 オーケストレータの依頼は短くする。
 詳細はファイルに置く。
+
+entry は ticket を直接読むため、依頼文に Goal / Scope / Done Criteria を再掲しない。
+worker に追加作業を戻すときは、reviewer 指摘の原文を引用する形で渡し、要約はしない。
 
 worker への例:
 
