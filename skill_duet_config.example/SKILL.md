@@ -64,14 +64,14 @@ Codex CLI のバージョン差分が疑わしい場合は `codex app-server --h
 | `entries[].thread_sandbox` | `thread/start` に渡す sandbox mode | 代表値は `"read-only"`、`"workspace-write"`、`"danger-full-access"`。thread 作成時の権限に関わるため変更は確認する |
 | `entries[].turn_sandbox_policy.type` | `turn/start` に渡す sandbox policy 種別 | 代表値は `"readOnly"`、`"workspaceWrite"`、`"dangerFullAccess"`。`"externalSandbox"` は外部 sandbox 前提なので、採用前に確認する |
 | `entries[].turn_sandbox_policy.networkAccess` | turn 中のネットワーク可否 | `true` は外部通信を許す。調査や依存取得に便利だが、変更は確認する |
-| `entries[].turn_sandbox_policy.writableRoots` | `workspaceWrite` で書き込み可能にする絶対パスの一覧 | 最新の app-server schema では `workspaceWrite` の構成要素。追加する場合はプロジェクトルートなど最小範囲にする |
+| `entries[].turn_sandbox_policy.writableRoots` | `workspaceWrite` で書き込み可能にする絶対パスの一覧 | ローカル絶対パスを含むため、共有される `DUET.md` や例にはデフォルトで書かない。sandbox レベルの書き込み制限が明示的に必要な private 設定でだけ追加する |
 | `entries[].turn_sandbox_policy.excludeTmpdirEnvVar` | `workspaceWrite` で環境変数由来の tmpdir を書き込み対象から外すか | 最新 schema で見える詳細設定。必要性が明確な場合だけ使う |
 | `entries[].turn_sandbox_policy.excludeSlashTmp` | `workspaceWrite` で `/tmp` を書き込み対象から外すか | 最新 schema で見える詳細設定。必要性が明確な場合だけ使う |
 
 ## 設定値の目安
 
 - 相談専用 entry は `thread_sandbox: "read-only"` と `turn_sandbox_policy.type: "readOnly"` を基本にする
-- 作業伴走 entry は `workspace-write` / `workspaceWrite` を使えるが、書き込み範囲とネットワーク可否を明示する
+- 作業伴走 entry は `workspace-write` / `workspaceWrite` を使える。共有設定では `writableRoots` を省き、role と運用メモで意図する書き込み範囲を明示する
 - `danger-full-access` / `dangerFullAccess` は強い権限なので、ユーザーが明示した場合以外は提案に留める
 - `approval_policy: "never"` は非対話運用に向くが、危険な操作も承認できない。権限を広げる場合は sandbox 側で制限する
 - `approval_policy: "on-request"` はAIエージェントが必要時に承認を求める運用に向く
@@ -112,8 +112,6 @@ entries:
     thread_sandbox: "workspace-write"
     turn_sandbox_policy:
       type: "workspaceWrite"
-      writableRoots:
-        - "/path/to/project"
       networkAccess: true
       excludeTmpdirEnvVar: false
       excludeSlashTmp: false

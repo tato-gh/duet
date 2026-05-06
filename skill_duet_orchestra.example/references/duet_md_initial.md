@@ -16,7 +16,9 @@ Do not add `planner` by default. The orchestrator owns phase and ticket planning
 
 ## Example
 
-Replace `/path/to/project` with the project root.
+This example intentionally omits `writableRoots`.
+Project-local writes are allowed for `workspaceWrite` entries, and the role boundaries describe the intended write scope.
+Do not put local absolute paths into shared `DUET.md` examples.
 
 ```markdown
 ---
@@ -36,8 +38,6 @@ entries:
     thread_sandbox: "workspace-write"
     turn_sandbox_policy:
       type: "workspaceWrite"
-      writableRoots:
-        - "/path/to/project"
       networkAccess: false
 
   - name: "reviewer"
@@ -65,8 +65,6 @@ entries:
     thread_sandbox: "workspace-write"
     turn_sandbox_policy:
       type: "workspaceWrite"
-      writableRoots:
-        - "/path/to/project/docs/project_management"
       networkAccess: false
 ---
 
@@ -91,6 +89,6 @@ entries:
 ## Notes
 
 - Keep `reviewer` read-only.
-- Keep `scribe` writable roots limited to `docs/project_management/` when possible.
-- If app-server rejects `writableRoots`, check the current Duet/Codex schema before changing security posture.
+- Do not include `writableRoots` by default in shared examples; local absolute paths can leak environment details.
+- Add `writableRoots` only in a private local `DUET.md` when sandbox-level write restriction is explicitly needed.
 - Enable `networkAccess` only when the ticket explicitly requires external access.
