@@ -60,6 +60,7 @@ entries:
       docs/project_management/ だけを更新してください。ソース、テスト、通常ドキュメント、設定ファイルは編集しません。
       作業担当、レビュー担当、依頼者の報告をもとに、roadmap、active kanban、ticket の Notes、Decisions、Verification、Handoff を更新してください。
       状態を二重管理せず、Done Criteria と Verification が満たされた場合だけ ticket を Done に移してください。
+      満たしていない場合は Done に移さず、不足を短く報告して差し戻してください。
       不明点や矛盾があれば編集前に報告してください。
     approval_policy: "never"
     thread_sandbox: "workspace-write"

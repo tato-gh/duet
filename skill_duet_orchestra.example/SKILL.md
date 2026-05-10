@@ -71,11 +71,7 @@ docs/project_management/
 - `kanban_<phase>.md`: 現フェーズ内の `Current` / `Todo` / `Done`
 - `kanban_<phase>/<ticket>.md`: ticket 詳細。必要な ticket だけ作る
 
-フェーズは並列しない。
-`roadmap.md` の current phase は1つだけにする。
-
-ticket も並列しない。
-active kanban の `Current` は1件だけにする。
+`roadmap.md` の current phase は、プロジェクトが今いる段階を指す（性質上単数）。
 
 初期設定が必要な場合は、以下を読む。
 
@@ -118,7 +114,7 @@ ticket 詳細を作る場合は、最低限この見出しを使う。
 
 - `worker`: 実装、調査、テスト、必要なファイル更新を行う。`workspace-write`
 - `reviewer`: diff、完了条件、リスク、検証不足を見る。`read-only`
-- `scribe`: `docs/project_management/` 更新専用。ソースやテストは触らない。`workspace-write`
+- `scribe`: `docs/project_management/` 更新専用。worker / reviewer の報告を ticket / kanban / roadmap の所定節へ構造化して記録する。Done への移動は独立に判定する。ソースやテストは触らない。`workspace-write`
 
 `planner` は基本不要。
 フェーズ設計や ticket 分解はオーケストレータが project_management を読んで短く判断する。
@@ -138,9 +134,9 @@ role には以下を必ず含める。
 `scribe` の role には以下を必ず含める。
 
 - `docs/project_management/` 以外を編集しない
-- worker/reviewer の報告から ticket、kanban、roadmap だけを更新する
+- worker / reviewer の報告を ticket、kanban、roadmap の該当節へ構造化して書き込む
 - 状態を二重管理しない
-- 完了扱いは Done Criteria と Verification が満たされた場合だけにする
+- Done Criteria と Verification が満たされた場合だけ ticket を Done に移す。満たしていない場合は Done に移さず、不足を短く報告する
 
 ## 開始手順
 
@@ -149,7 +145,7 @@ role には以下を必ず含める。
 3. active kanban の `kanban_<phase>.md` を読む
 4. `Current` ticket があれば ticket 詳細を読む
 5. `DUET.md` または `entries.exs` で `worker` / `reviewer` / `scribe` が使えるか確認する
-6. current phase が複数、Current ticket が複数、ticket 不在などの矛盾があれば、作業前にユーザーへ短く確認する
+6. current phase が複数、ticket 不在などの矛盾、または `Current` ticket が複数の並列状態があれば、作業前にユーザーへ短く確認する（特に開始時点での並列は稀なので意図を確かめる）
 
 管理ファイルが存在しない場合は、直接作成しない。
 `references/project_management_initial.md` と `references/duet_md_initial.md` を読んで不足を確認し、ユーザーに「初期化を scribe に依頼してよいか」を確認する。
@@ -157,14 +153,14 @@ role には以下を必ず含める。
 ## Ticket 実行ループ
 
 1. `Current` ticket を1つ選ぶ。なければ `Todo` から次候補を選び、移動を scribe に依頼する
-2. worker に ticket path と目的だけを渡す。詳細説明は繰り返さず、ticket を読ませる
+2. worker への最初の依頼の直前に `/clear` または `/compact` を送る（判定基準は「compact / clear」節）。その上で worker に ticket path と目的だけを渡す。詳細説明は繰り返さず、ticket を読ませる
 3. worker の報告を受け、必要なら追加作業を worker に依頼する
 4. オーケストレータは worker 報告、変更ファイル一覧、`git status --short`、ticket の Scope / Done Criteria の整合性を見る。実装内容の詳細レビューは reviewer に委譲する
-5. reviewer に ticket path、最新 diff、worker 報告を見せてレビューさせる
+5. reviewer への最初の依頼の直前に `/clear` または `/compact` を送る。その上で ticket path、最新 diff、worker 報告を見せてレビューさせる
 6. reviewer の重大指摘、未完了判定、追加作業要求があれば、その指摘を要約しすぎず worker に戻す。worker には reviewer 指摘、ticket path、守るべき Scope だけを渡し、対応後に変更ファイル・検証結果・未解決事項を再報告させる
-7. worker の再対応後は、必要に応じて reviewer に再レビューさせる
-8. Done Criteria と Verification を満たしたら、scribe に ticket と kanban の更新を依頼する
-9. ticket 完了後、worker に `/clear` を送る。長い継続 ticket では節目ごとに `/compact` を送る
+7. worker の再対応後は、必要に応じて reviewer に再レビューさせる（同一 ticket 内なので `/clear` も `/compact` も送らない）
+8. orchestrator が Done Criteria と Verification を満たしたと判断したら、scribe に ticket と kanban の更新を依頼する。scribe は独立に同条件を確認し、満たしていなければ Done に移さず差し戻す
+9. 長い継続 ticket では節目ごとに worker に `/compact` を送る
 
 ## 短い依頼を保つ
 
@@ -203,21 +199,21 @@ docs/project_management/ 以外は触らないでください。
 `/compact` と `/clear` は、オーケストレータが duet entry へ送る文脈制御コマンドである。
 entry の role ではなく、指揮者側の手順として扱う。
 
+- worker / reviewer に対しては、ticket の最初の依頼の直前に `/clear` または `/compact` を送る。会話セッションに直前依頼の内容が残っており、それが次の作業/判断に効くと見える場合のみ `/compact`、それ以外は `/clear`。同一 ticket 内の再依頼の前には送らない
 - 同じ ticket が長く続く: scribe に Handoff 更新を依頼した後、worker に `/compact` を送る
-- ticket が完了した: worker と reviewer に `/clear` を送る
-- reviewer は単発レビューが多いため、レビュー後に `/clear` を送る
 - scribe は project_management の記録役なので、フェーズ内は必要に応じて `/compact` を送る。フェーズ切替時は `/clear` を送る
 - `/compact` 前に、消えると困る内容が ticket の `Handoff`、`Decisions`、`Verification` に残っているか確認する
 
 ## 完了判定
 
-完了扱いにする条件。
+以下の条件を、orchestrator と scribe が独立に確認する。
 
 - Done Criteria を満たしている
 - worker が変更ファイルと検証結果を報告している
 - reviewer が重大問題なし、または残リスクを明示して受容可能と判断できる
 - scribe が ticket の `Verification` と `Handoff`、kanban の状態を更新している
 
+orchestrator は前3項を見て scribe に依頼する。scribe は依頼受領後に再確認し、満たしていれば更新、満たしていなければ差し戻して報告する。
 満たさない場合は Done に移さない。
 
 ## エラー時
