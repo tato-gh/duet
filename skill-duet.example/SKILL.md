@@ -40,6 +40,9 @@ elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/entries.exs
 
 entry はあなたと同じプロジェクトルートで動く。ファイル参照やファイル操作の可否は、その entry の `approval_policy`、`thread_sandbox`、`turn_sandbox_policy` に従う。
 
+duet から起動された entry のコマンドには `CODEX_DUET_ENTRY=1` が設定される。
+hook やスクリプトで duet 経由の実行かどうかを判定したい場合は、この環境変数を参照する。
+
 ## entry の選び方
 
 - 既存文脈を引き継ぐなら同じ entry を再利用する

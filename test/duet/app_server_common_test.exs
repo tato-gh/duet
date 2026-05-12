@@ -42,4 +42,11 @@ defmodule Duet.AppServerCommonTest do
     assert {:ok, %{"choice" => %{"answers" => ["no input"]}}} =
              AppServerCommon.build_non_interactive_answers(params, "no input")
   end
+
+  test "start_app_server/3 marks commands as started by duet" do
+    port = AppServerCommon.start_app_server("printf '%s\\n' \"$CODEX_DUET_ENTRY\"", File.cwd!(), 1024)
+
+    assert_receive {^port, {:data, {:eol, "1"}}}, 1_000
+    assert_receive {^port, {:exit_status, 0}}, 1_000
+  end
 end

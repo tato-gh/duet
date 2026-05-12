@@ -47,6 +47,7 @@ defmodule Duet.AppServerCommon do
         args: [~c"-lc", String.to_charlist(command)],
         cd: String.to_charlist(cwd),
         env: [
+          {~c"CODEX_DUET_ENTRY", ~c"1"},
           {~c"LANG", String.to_charlist(@utf8_locale)},
           {~c"LC_ALL", String.to_charlist(@utf8_locale)}
         ],
