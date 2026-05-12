@@ -1,9 +1,9 @@
 ---
-name: duet
+name: skill-duet
 description: 「duetを使って」「duetで～」「別視点で継続相談して」「同じ相手に続けて依頼して」など、起動中の duet entry (AI) を文脈が続く伴走相手として活用するときに使う。利用可能 entry を確認し、用途に合う entry を選んで post/post_parallel から会話する。
 ---
 
-# duet
+# skill-duet
 
 起動中の duet entry へプロンプトを送信し、応答を受け取る。
 各 entry は独立したスレッド文脈を持つため、同じ entry に連続送信すると会話を継続できる。
@@ -35,7 +35,7 @@ entry 名が不明なとき、会話の初回、または `:not_found` が返っ
 すでに使う entry が明確で、同じ文脈を継続する場合は毎回確認しなくてよい。
 
 ```bash
-elixir --sname NAME@localhost /path/to/skill_duet/entries.exs
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/entries.exs
 ```
 
 entry はあなたと同じプロジェクトルートで動く。ファイル参照やファイル操作の可否は、その entry の `approval_policy`、`thread_sandbox`、`turn_sandbox_policy` に従う。
@@ -52,13 +52,13 @@ entry はあなたと同じプロジェクトルートで動く。ファイル�
 単一 entry へ送る:
 
 ```bash
-elixir --sname NAME@localhost /path/to/skill_duet/post.exs ENTRY_NAME "PROMPT"
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post.exs ENTRY_NAME "PROMPT"
 ```
 
 長文・複数行の場合:
 
 ```bash
-elixir --sname NAME@localhost /path/to/skill_duet/post.exs ENTRY_NAME "$(cat <<'EOF'
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post.exs ENTRY_NAME "$(cat <<'EOF'
 複数行のプロンプト
 行2
 行3
@@ -69,13 +69,13 @@ EOF
 複数 entry へ並行送信する:
 
 ```bash
-elixir --sname NAME@localhost /path/to/skill_duet/post_parallel.exs ENTRY1 "PROMPT1" ENTRY2 "PROMPT2"
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post_parallel.exs ENTRY1 "PROMPT1" ENTRY2 "PROMPT2"
 ```
 
 複数 entry に長文・複数行を送る場合:
 
 ```bash
-elixir --sname NAME@localhost /path/to/skill_duet/post_parallel.exs \
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post_parallel.exs \
   entry1 "$(cat <<'EOF'
 プロンプト1
 複数行

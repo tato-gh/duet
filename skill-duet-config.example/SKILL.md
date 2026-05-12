@@ -1,9 +1,9 @@
 ---
-name: duet_config
+name: skill-duet-config
 description: 「DUET.mdを更新して」「duet設定を整理して」「entryを追加して」「roleを見直して」など、プロジェクトの DUET.md をAIエージェントが読み、必要に応じて安全に編集するときに使う。既存方針を尊重し、軽微な整理は進め、方針変更や権限変更は確認する。
 ---
 
-# duet_config
+# skill-duet-config
 
 プロジェクトの `DUET.md` を、AIエージェントと人間の共有設定ガイドとして扱う。
 `DUET.md` には Duet の起動設定だけでなく、そのプロジェクトでAIエージェントが作業するときの前提、entry の役割、権限、運用上の合意を残す。

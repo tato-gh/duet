@@ -1,9 +1,9 @@
 ---
-name: duet_orchestra
-description: 「skill_duet_orchestraで進めて」「duet orchestra」「オーケストレータとして進めて」「長時間タスクをduetで管理して」など、AIがプロダクトオーナー型オーケストレータに徹し、docs/project_management と duet entry を使って直列チケットを進めるときに使う。オーケストレータ自身はファイル編集・実装・テスト実行をせず、worker/reviewer/scribe entry に委譲する。
+name: skill-duet-orchestra
+description: 「skill-duet-orchestraで進めて」「duet orchestra」「オーケストレータとして進めて」「長時間タスクをduetで管理して」など、AIがプロダクトオーナー型オーケストレータに徹し、docs/project_management と duet entry を使って直列チケットを進めるときに使う。オーケストレータ自身はファイル編集・実装・テスト実行をせず、worker/reviewer/scribe entry に委譲する。
 ---
 
-# duet_orchestra
+# skill-duet-orchestra
 
 長時間タスクを、薄いオーケストレータと duet entry 群で進める。
 プロジェクト状態の原本は `docs/project_management/` に置き、duet entry は task 単位の実行主体・レビュー主体・記録主体として使う。
