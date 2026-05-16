@@ -152,6 +152,14 @@ ticket を作る前、または実装 ticket に着手する前に、次を短�
 
 これらが書けない場合は、実装 ticket ではなく調査 ticket、設計 ticket、または前提整理にする。
 
+## Ticket And Change Boundary
+
+ticket は原則として、完了後に独立した変更単位として説明できる粒度にする。
+1つの ticket が複数の独立した実装領域、検証単位、または責任範囲を含む場合は、着手前に ticket を分割する。
+
+commit を扱う場合は、ticket 境界を自然な commit 候補として使う。
+ticket と commit の境界がずれる場合は、先に分割案または commit 候補を整理し、差分を見たときに「何のための変更か」を説明できる状態にする。
+
 ## DUET.md の entry
 
 この skill が前提にする entry。
