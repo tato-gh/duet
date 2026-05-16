@@ -44,7 +44,8 @@ defmodule Duet.AppServerCommonTest do
   end
 
   test "start_app_server/3 marks commands as started by duet" do
-    port = AppServerCommon.start_app_server("printf '%s\\n' \"$CODEX_DUET_ENTRY\"", File.cwd!(), 1024)
+    port =
+      AppServerCommon.start_app_server("printf '%s\\n' \"$CODEX_DUET_ENTRY\"", File.cwd!(), 1024)
 
     assert_receive {^port, {:data, {:eol, "1"}}}, 1_000
     assert_receive {^port, {:exit_status, 0}}, 1_000
