@@ -1,6 +1,6 @@
 ---
 name: skill-duet-release-orchestra
-description: 「duet release orchestraで進めて」「release orchestra」「duetでrelease/ticket管理して」「長時間タスクをrelease単位で管理して」など、AIがオーケストレータに徹し、docs/project_management の state / releases / release kanban / ticket と duet entry を使って直列作業を進めるときに使う。
+description: 「duet release orchestraで進めて」「release orchestra」「duetでrelease/ticket管理して」「長時間タスクをrelease単位で管理して」「quickfixを進めて」など、AIがオーケストレータに徹し、docs/project_management の state / releases / release kanban / ticket / quickfix と duet entry を使って直列作業を進めるときに使う。
 ---
 
 # skill-duet-release-orchestra
@@ -9,6 +9,7 @@ description: 「duet release orchestraで進めて」「release orchestra」「d
 プロジェクト状態の原本は `docs/project_management/` に置き、duet entry は ticket 単位の実行主体・レビュー主体・記録主体として使う。
 
 orchestra の役割境界を保ちつつ、プロジェクト管理を release / ticket 型にする。
+release 未満の小修正は `quickfix/` の ticket として扱える。
 
 ## 絶対境界
 
@@ -49,6 +50,11 @@ docs/project_management/
   release_<name>/
     kanban.md
     <ticket>.md
+  quickfix/
+    README.md
+    ticket-*.md
+    done/
+      ticket-*.md
   incubator/
     <note>.md
 ```
@@ -59,6 +65,9 @@ docs/project_management/
 - `releases.md`: 定義済み release の台帳。release レベルの Summary / Result / Decisions / Not Needed / Carry Over を置く
 - `release_<name>/kanban.md`: release 内の `Current` / `Todo` / `Done`
 - `release_<name>/<ticket>.md`: ticket 詳細
+- `quickfix/README.md`: release 未満の小修正の軽い運用ルール
+- `quickfix/ticket-*.md`: 未着手 quickfix ticket。直下は未着手だけにする
+- `quickfix/done/ticket-*.md`: 完了した quickfix ticket
 - `incubator/<note>.md`: release に属さない仮説、発想、概念メモ。状態の原本にしない
 
 `state.md` の `release_focus` は原則1つにする。
@@ -85,6 +94,7 @@ active release board の `Current` ticket も原則1つにする。
 
 `roadmap.md` は予定や候補を確認するときだけ読む。
 `incubator/` は仮説や概念メモを探す必要があるときだけ読む。
+`quickfix/` はユーザーが quickfix を進めると言ったとき、または release 未満の小修正を登録・実行するときだけ読む。
 
 開始時点で `release_focus` が複数、または `Current` ticket が複数ある場合は、作業前にユーザーへ短く確認する。
 
@@ -105,6 +115,25 @@ ticket は原則として次を短く言える大きさにする。
 - 問い、判断、または確認対象
 - 出力物
 - Done と言える条件
+
+## Quickfix
+
+`quickfix` は release 未満の小修正である。
+release を作るほどではない局所的な UI 調整、表示文言、軽いバグ修正だけを置く。
+
+`docs/project_management/quickfix/` 直下の `ticket-*.md` は未着手として扱う。
+完了した ticket は `docs/project_management/quickfix/done/` へ移す。
+quickfix には kanban、Current、Todo、`releases.md` の更新を使わない。
+
+以下に当てはまるものは quickfix にしない。
+
+- 複数画面、設計、または判断が必要
+- Done Criteria を短く書けない
+- release の Result / Carry Over として閉じるべきまとまり
+- 既存の完了済み release を戻して扱うもの
+
+quickfix で扱えないものは、`incubator/`、`roadmap.md`、または新しい release / ticket へ送る。
+完了済み release は再オープンしない。
 
 ## Ticket 形式
 
@@ -183,7 +212,7 @@ role には以下を必ず含める。
 `scribe` の role には以下を必ず含める。
 
 - `docs/project_management/` 以外を編集しない
-- worker / reviewer の報告を ticket、kanban、state、releases、roadmap の該当節へ構造化して書き込む
+- worker / reviewer の報告を ticket、kanban、state、releases、roadmap、quickfix の該当節へ構造化して書き込む
 - 同じ状態を複数ファイルに重複して持たせない
 - `state.md` に詳細な判断、検証、Current ticket を持たせない
 - `roadmap.md` に現在状態や完了済み release を持たせない
@@ -202,6 +231,18 @@ role には以下を必ず含める。
 9. orchestrator が Done Criteria と Verification を満たしたと判断したら、scribe に ticket と kanban の更新を依頼する。scribe は独立に同条件を確認し、満たしていなければ Done に移さず差し戻す
 10. release の Exit Criteria が満たされた場合は、scribe に `releases.md` の Summary / Result / Decisions / Not Needed / Carry Over と、必要なら `state.md` の次 `release_focus` 更新を依頼する
 11. 長い継続 ticket では節目ごとに scribe に Handoff 更新を依頼し、その後 worker に `/compact` を送る
+
+## Quickfix 実行ループ
+
+ユーザーが quickfix を進めると言った場合は、release の kanban ではなく `quickfix/` を使う。
+
+1. `docs/project_management/quickfix/README.md` と `quickfix/` 直下の ticket を読む
+2. ユーザー指定 ticket があればそれを選ぶ。指定がなければ直下 ticket をファイル名順で1つ選ぶ
+3. ticket が quickfix の大きさを超えていれば着手せず、incubator / roadmap / release への移動を提案する
+4. worker への最初の依頼の直前に `/clear` または `/compact` を送る。その上で quickfix ticket path だけを渡す
+5. reviewer に最新 diff と Done Criteria を見せて、範囲外変更、未完了、検証不足を確認させる
+6. Done Criteria と Verification を満たしたら、scribe に ticket の更新と `quickfix/done/` への移動を依頼する
+7. quickfix では `state.md`、release kanban、`releases.md` を更新しない。ただし、quickfix では扱えないと判明した事実を incubator / roadmap に残す必要がある場合は scribe に依頼する
 
 ## 短い依頼を保つ
 
@@ -235,6 +276,14 @@ worker/reviewer の結果を反映して ticket、kanban、必要なら releases
 docs/project_management/ 以外は触らないでください。
 ```
 
+quickfix の scribe への例:
+
+```text
+ticket: docs/project_management/quickfix/ticket-a.md
+worker/reviewer の結果を反映し、Done Criteria と Verification を満たしていれば quickfix/done/ へ移動してください。
+release kanban、state、releases は更新しないでください。
+```
+
 ## compact / clear
 
 `/compact` と `/clear` は、オーケストレータが duet entry へ送る文脈制御コマンドである。
@@ -253,7 +302,7 @@ entry の role ではなく、指揮者側の手順として扱う。
 - Done Criteria を満たしている
 - worker が変更ファイルと検証結果を報告している
 - reviewer が重大問題なし、または残リスクを明示して受容可能と判断できる
-- scribe が ticket の `Verification` と `Handoff`、kanban の状態を更新している
+- scribe が ticket の `Verification` と `Handoff`、kanban の状態を更新している。quickfix の場合は kanban ではなく `quickfix/done/` へ移動している
 
 orchestrator は前3項を見て scribe に依頼する。
 scribe は依頼受領後に再確認し、満たしていれば更新、満たしていなければ差し戻して報告する。
@@ -271,6 +320,7 @@ release レベルの結果、決定、不要だったもの、持ち越しは `r
 - 管理ファイルと diff が矛盾する: 管理ファイルではなく実 diff と検証結果を優先し、scribe に訂正させる
 - `state.md` が重くなっている: 詳細を ticket、kanban、releases に移し、`state.md` は軽い入口へ戻すよう scribe に依頼する
 - `roadmap.md` が現在状態を持っている: 現在状態を `state.md` / `releases.md` / kanban へ移すよう scribe に依頼する
+- quickfix が大きくなった: `quickfix/done/` へは移さず、incubator / roadmap / release への移動を相談する
 
 ## References
 

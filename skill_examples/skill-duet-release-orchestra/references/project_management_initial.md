@@ -16,6 +16,9 @@ docs/project_management/
   release_<name>/
     kanban.md
     <ticket>.md
+  quickfix/
+    README.md
+    done/
   incubator/
     README.md
 ```
@@ -48,6 +51,11 @@ docs/project_management/
   release_<name>/
     kanban.md
     <ticket>.md
+  quickfix/
+    README.md
+    ticket-*.md
+    done/
+      ticket-*.md
   incubator/
     <note>.md
 ```
@@ -65,6 +73,7 @@ docs/project_management/
 
 `roadmap.md` は予定や候補を確認するときだけ読みます。
 `incubator/` は release に属さない仮説や概念メモを探す必要があるときだけ参照します。
+`quickfix/` は release 未満の小修正をその場で扱うときだけ参照します。
 
 ## File Roles
 
@@ -95,6 +104,18 @@ release 内の ticket 状態を管理する。
 ticket の詳細を書く。
 重要な事実、判断、検証結果、未解決事項、引き継ぎはここに残す。
 
+`quickfix/README.md`:
+quickfix の軽い運用ルールを書く。
+kanban、Current、Todo、release 台帳は持たない。
+
+`quickfix/ticket-*.md`:
+release にするほどではない未着手の小修正を書く。
+直下は未着手 ticket だけにする。
+
+`quickfix/done/ticket-*.md`:
+完了した quickfix ticket を置く。
+完了後は直下から `done/` へ移す。
+
 `incubator/<note>.md`:
 release 非依存の発想、仮説、概念メモを書く。
 正式な作業対象にする場合は、該当 release と ticket へ必要部分を移す。
@@ -112,6 +133,11 @@ release を切るのは、現在のまとまりを Summary / Result / Decisions 
 
 `ticket` は release の中の story です。
 作業名ではなく、利用者から見て「これをした」と言える出力物を持つ単位にします。
+
+`quickfix` は release 未満の小修正です。
+直下の ticket は未着手として扱い、完了したら `quickfix/done/` へ移します。
+kanban、Current、Todo、`releases.md` の更新は使いません。
+大きい、判断が多い、複数画面に広がる、または設計が必要なものは quickfix に置かず、incubator、roadmap、または release へ送ります。
 
 ## State Rules
 
@@ -316,6 +342,33 @@ Out:
 - <short context needed after compact or interruption>
 ```
 
+## quickfix/README.md Template
+
+````markdown
+# Quickfix
+
+release 未満の小さい修正 ticket を置く場所です。
+
+## Directory
+
+```text
+docs/project_management/quickfix/
+  README.md
+  ticket-*.md
+  done/
+    ticket-*.md
+```
+
+## Rules
+
+- `quickfix/` 直下は未着手 quickfix ticket だけにする
+- 完了した ticket は `quickfix/done/` へ移動する
+- kanban、Current、Todo は作らない
+- `releases.md` は触らない
+- 大きい、判断が多い、複数画面に広がる、または設計が必要なものは quickfix に置かず、incubator / roadmap / release へ送る
+- quickfix ticket は、その場で実行できる小修正だけにする
+````
+
 ## incubator/README.md Template
 
 ```markdown
@@ -356,7 +409,7 @@ Use a short prompt like this.
 
 ```text
 docs/project_management/ が未作成です。
-release orchestra 運用の初期状態として README.md、state.md、roadmap.md、releases.md、最初の release kanban、必要なら最初の ticket、incubator/README.md を作成してください。
+release orchestra 運用の初期状態として README.md、state.md、roadmap.md、releases.md、最初の release kanban、必要なら最初の ticket、quickfix/README.md、quickfix/done/、incubator/README.md を作成してください。
 この reference の構造に従い、docs/project_management/ 以外は触らないでください。
 不明な release 名や ticket 名は、作成前に質問してください。
 ```
