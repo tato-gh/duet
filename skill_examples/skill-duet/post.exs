@@ -1,5 +1,10 @@
 # Usage: elixir --sname NAME@localhost post.exs ENTRY_NAME PROMPT
 
+if System.get_env("CODEX_DUET_ENTRY") == "1" do
+  IO.puts(:stderr, "Error: a Duet entry cannot call Duet via post.exs")
+  System.halt(1)
+end
+
 defmodule DuetScript do
   def get_node_name do
     case File.read(Path.join(File.cwd!(), "DUET.md")) do
