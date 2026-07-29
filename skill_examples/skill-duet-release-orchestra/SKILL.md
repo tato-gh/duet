@@ -116,6 +116,9 @@ ticket は原則として次を短く言える大きさにする。
 - 出力物
 - Done と言える条件
 
+release を作る時点で、通常 ticket 群の後、release acceptance の直前に `ticket_review_omissions.md`（以下 `omission review ticket`）を必ず1件作る。
+候補がまだなくても省略しない。
+
 ## Quickfix
 
 `quickfix` は release 未満の小修正である。
@@ -181,6 +184,38 @@ ticket を作る前、または実装 ticket に着手する前に、次を短�
 
 これらが書けない場合は、実装 ticket ではなく調査 ticket、設計 ticket、または前提整理にする。
 
+## 理想動作と omission review ticket
+
+このルールは、理想動作以外のシナリオについて AI が必要可否や価値を決めて実装・テストへ昇格することを防ぎ、その判断をユーザーに委ねたまま余計な作業をせず release を進めるために使う。
+
+通常の設計・実装 ticket は、理想的な機能を成立させるために必要な動作を対象にする。
+テスト粒度の上限は、正常系で C1、例外系で C0 とする。
+C0 / C1 は網羅率の達成目標や、未指定の例外動作・状態遷移を追加する根拠にしない。
+
+通常 ticket の作業中に、その範囲を超える未確認事項を見つけた場合は、実装・テスト・Done Criteria・review blocker に追加しない。scribe に依頼し、release 作成時に用意した `omission review ticket` の候補へ次を記録する。
+
+- 未確認の状況
+- 漏れ候補として浮上した背景: 観測、関連するコード経路、または指摘された事実
+- 何が未確認なのか
+- 現在の期待動作: 未確認
+- 実装: 未着手
+- テスト: 未着手
+- 見つかった ticket または差分
+
+AI は浮上した背景を残すが、必要可否や価値を確定しない。損失、危険度、優先度、推奨対応の判断を求められた場合だけ、その判断材料をユーザーへ提示する。
+
+`omission review ticket` を `Current` に移す前に orchestra を停止し、ユーザーに確認する。
+候補を短く列挙し、今回どれを実装・テスト対象にするかを確認する。候補が0件でも停止し、確認漏れなしとして閉じてよいか確認する。
+
+ユーザー確認後は次のように扱う。
+
+- 選択された候補だけ、期待動作を確認して Scope / Done Criteria へ昇格する
+- 選択されなかった候補は今回の対象外として閉じる
+- 選択されなかった候補を Carry Over、roadmap、incubator、次 release へ自動転記しない
+- 選択項目が0件なら実装・テスト・空 commit を作らず、確認結果だけを scribe に記録させる
+
+release acceptance は、`omission review ticket` のユーザー確認と完了記録より先に開始しない。
+
 ## Ticket And Change Boundary
 
 ticket は原則として、完了後に独立した変更単位として説明できる粒度にする。
@@ -221,11 +256,11 @@ role には以下を必ず含める。
 ## Ticket 実行ループ
 
 1. `state.md` の `release_focus` と active kanban を確認する
-2. `Current` ticket を1つ選ぶ。なければ `Todo` の先頭候補を `Current` に移すよう scribe に依頼する
+2. `Current` ticket を1つ選ぶ。なければ `Todo` の先頭候補を確認する。候補が `omission review ticket` の場合は `Current` へ移す前に「理想動作と omission review ticket」の強制停止を行う。それ以外は `Current` に移すよう scribe に依頼する
 3. worker への最初の依頼の直前に `/clear` または `/compact` を送る。その上で worker に ticket path と目的だけを渡す。詳細説明は繰り返さず、ticket を読ませる
 4. worker の報告を受け、必要なら追加作業を worker に依頼する
 5. オーケストレータは worker 報告、変更ファイル一覧、`git status --short`、ticket の Scope / Done Criteria の整合性を見る。実装内容の詳細レビューは reviewer に委譲する
-6. reviewer への最初の依頼の直前に `/clear` または `/compact` を送る。その上で ticket path、最新 diff、worker 報告を見せてレビューさせる
+6. reviewer への最初の依頼の直前に `/clear` または `/compact` を送る。その上で ticket path、最新 diff、worker 報告を見せてレビューさせる。ticket 範囲を超える指摘は current ticket の blocker や追加作業にせず、`omission review ticket` の候補として返させる
 7. reviewer の重大指摘、未完了判定、追加作業要求があれば、その指摘を要約しすぎず worker に戻す
 8. worker の再対応後は、必要に応じて reviewer に再レビューさせる。同一 ticket 内なので原則 `/clear` も `/compact` も送らない
 9. orchestrator が Done Criteria と Verification を満たしたと判断したら、scribe に ticket と kanban の更新を依頼する。scribe は独立に同条件を確認し、満たしていなければ Done に移さず差し戻す
