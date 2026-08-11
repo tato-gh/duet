@@ -5,6 +5,16 @@ defmodule Duet do
 
   @timeout 600_000
   @reservation_timeout 5_000
+  @overview_prompt """
+  オーケストレータに向けて、この entry の overview を返してください。新しい作業依頼ではありません。
+  確認できる事実だけを、最大 3 項目・各 1 文の箇条書きで簡潔に説明してください。
+
+  - role
+  - 現在も有効な経緯・保持している文脈の概要
+  - 継続中または未完了の事項が明確にあるかどうか。ある場合に限り、その状況と未解決点
+
+  分からないことは推測せず省略してください。ファイル変更や外部操作は行わないでください。
+  """
 
   @doc """
   Returns the currently running entries.
@@ -47,6 +57,15 @@ defmodule Duet do
   end
 
   @doc """
+  Asks a named entry for a concise self-description of its role and current context.
+
+  This is a regular `post/2`, so a busy entry returns `{:error, :busy}`.
+  """
+  def overview(entry_name) when is_binary(entry_name) do
+    post(entry_name, @overview_prompt)
+  end
+
+  @doc """
   Sends a prompt to every running entry and waits for all responses.
 
   This is the broadcast equivalent of `post/2`: busy entries return `{:error, :busy}`.
@@ -68,6 +87,16 @@ defmodule Duet do
       {{:ok, {name, result}}, _expected_name} -> {name, result}
       {{:exit, reason}, name} -> {name, {:error, reason}}
     end)
+  end
+
+  @doc """
+  Asks every running entry for a concise self-description of its role and current context.
+
+  This is the broadcast equivalent of `overview/1`. Busy entries return
+  `{:error, :busy}`.
+  """
+  def overview_all do
+    post_all(@overview_prompt)
   end
 
   @doc """

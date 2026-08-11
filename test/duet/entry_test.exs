@@ -141,6 +141,31 @@ defmodule Duet.EntryTest do
            |> Enum.any?(&(input_text(&1) |> String.contains?("shared prompt")))
   end
 
+  test "overview asks an entry to describe its current context", %{tmp_dir: tmp_dir} do
+    log_path = Path.join(tmp_dir, "overview.log")
+    File.write!(log_path, "")
+
+    start_entry!(
+      name: "api-1",
+      role: "API 担当者",
+      command: fake_app_server_command(log_path)
+    )
+
+    assert {:ok, "引き継ぎを確認しました"} = Duet.overview("api-1")
+
+    assert [{"api-1", {:ok, "引き継ぎを確認しました"}}] = Duet.overview_all()
+
+    turn_inputs =
+      log_path
+      |> read_received_messages()
+      |> Enum.filter(&(Map.get(&1, "method") == "turn/start"))
+      |> Enum.map(&input_text/1)
+
+    assert Enum.all?(turn_inputs, &String.contains?(&1, "この entry の overview"))
+    assert Enum.all?(turn_inputs, &String.contains?(&1, "確認できる事実だけを、最大 3 項目・各 1 文"))
+    assert Enum.all?(turn_inputs, &String.contains?(&1, "未完了の事項が明確にあるかどうか"))
+  end
+
   test "/compact returns an error when the summary is empty", %{tmp_dir: tmp_dir} do
     log_path = Path.join(tmp_dir, "app_server.log")
     File.write!(log_path, "")
