@@ -6,6 +6,9 @@ defmodule Duet.Config do
   @default_entry %{
     command: "codex app-server",
     role: "",
+    model: nil,
+    reasoning_effort: nil,
+    service_tier: nil,
     approval_policy: "never",
     thread_sandbox: "read-only",
     turn_sandbox_policy: %{
@@ -71,6 +74,9 @@ defmodule Duet.Config do
        name: name,
        command: Map.get(entry, "command", @default_entry.command),
        role: Map.get(entry, "role", @default_entry.role),
+       model: normalize_optional_string(Map.get(entry, "model")),
+       reasoning_effort: normalize_reasoning_effort(Map.get(entry, "reasoning_effort")),
+       service_tier: normalize_service_tier(Map.get(entry, "service_tier")),
        approval_policy: Map.get(entry, "approval_policy", @default_entry.approval_policy),
        thread_sandbox: Map.get(entry, "thread_sandbox", @default_entry.thread_sandbox),
        turn_sandbox_policy:
@@ -79,6 +85,18 @@ defmodule Duet.Config do
   end
 
   defp build_entry(_), do: {:error, "entries item is missing required field 'name'"}
+
+  defp normalize_service_tier("fast"), do: "fast"
+  defp normalize_service_tier(_), do: @default_entry.service_tier
+
+  defp normalize_reasoning_effort(effort)
+       when effort in ["none", "low", "medium", "high", "xhigh", "max"],
+       do: effort
+
+  defp normalize_reasoning_effort(_), do: @default_entry.reasoning_effort
+
+  defp normalize_optional_string(value) when is_binary(value) and value != "", do: value
+  defp normalize_optional_string(_), do: nil
 
   defp validate_keys(yaml) do
     allowed = ["node_name", "entries"]

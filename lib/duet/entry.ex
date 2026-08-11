@@ -25,14 +25,19 @@ defmodule Duet.Entry do
   end
 
   @impl true
-  def init(%{
-        name: name,
-        command: command,
-        role: role,
-        approval_policy: approval_policy,
-        thread_sandbox: thread_sandbox,
-        turn_sandbox_policy: turn_sandbox_policy
-      }) do
+  def init(
+        %{
+          name: name,
+          command: command,
+          role: role,
+          approval_policy: approval_policy,
+          thread_sandbox: thread_sandbox,
+          turn_sandbox_policy: turn_sandbox_policy
+        } = config
+      ) do
+    model = Map.get(config, :model)
+    reasoning_effort = Map.get(config, :reasoning_effort)
+    service_tier = Map.get(config, :service_tier)
     cwd = Duet.Config.config_file_path() |> Path.dirname()
     port = AppServerCommon.start_app_server(command, cwd, @port_line_bytes)
 
@@ -45,6 +50,9 @@ defmodule Duet.Entry do
       rpc_id: 1,
       pending_method: nil,
       role: role,
+      model: model,
+      reasoning_effort: reasoning_effort,
+      service_tier: service_tier,
       approval_policy: approval_policy,
       thread_sandbox: thread_sandbox,
       turn_sandbox_policy: turn_sandbox_policy,
@@ -72,12 +80,7 @@ defmodule Duet.Entry do
   @impl true
   def handle_call({:post, "/clear"}, from, state) do
     state =
-      AppServerCommon.send_rpc(state, "thread/start", %{
-        approvalPolicy: state.approval_policy,
-        sandbox: state.thread_sandbox,
-        cwd: state.cwd,
-        dynamicTools: []
-      })
+      AppServerCommon.send_rpc(state, "thread/start", thread_start_params(state))
 
     {:noreply,
      %{state | status: :session_ready, pending_method: :thread_start, pending_call: from}}
@@ -86,13 +89,11 @@ defmodule Duet.Entry do
   @impl true
   def handle_call({:post, "/compact"}, from, state) do
     state =
-      AppServerCommon.send_rpc(state, "turn/start", %{
-        threadId: state.thread_id,
-        input: [%{type: "text", text: build_compact_summary_prompt()}],
-        cwd: state.cwd,
-        approvalPolicy: state.approval_policy,
-        sandboxPolicy: state.turn_sandbox_policy
-      })
+      AppServerCommon.send_rpc(
+        state,
+        "turn/start",
+        turn_start_params(state, [%{type: "text", text: build_compact_summary_prompt()}])
+      )
 
     {:noreply,
      %{
@@ -109,13 +110,7 @@ defmodule Duet.Entry do
     input = build_turn_input(state, prompt)
 
     state =
-      AppServerCommon.send_rpc(state, "turn/start", %{
-        threadId: state.thread_id,
-        input: input,
-        cwd: state.cwd,
-        approvalPolicy: state.approval_policy,
-        sandboxPolicy: state.turn_sandbox_policy
-      })
+      AppServerCommon.send_rpc(state, "turn/start", turn_start_params(state, input))
 
     {:noreply,
      %{
@@ -187,12 +182,7 @@ defmodule Duet.Entry do
     state = AppServerCommon.send_notification(state, "initialized", %{})
 
     state =
-      AppServerCommon.send_rpc(state, "thread/start", %{
-        approvalPolicy: state.approval_policy,
-        sandbox: state.thread_sandbox,
-        cwd: state.cwd,
-        dynamicTools: []
-      })
+      AppServerCommon.send_rpc(state, "thread/start", thread_start_params(state))
 
     %{state | status: :session_ready, pending_method: :thread_start}
   end
@@ -210,13 +200,11 @@ defmodule Duet.Entry do
     input = build_turn_input(state_with_new_thread, build_compact_handoff_prompt(summary))
 
     state =
-      AppServerCommon.send_rpc(state_with_new_thread, "turn/start", %{
-        threadId: thread_id,
-        input: input,
-        cwd: state.cwd,
-        approvalPolicy: state.approval_policy,
-        sandboxPolicy: state.turn_sandbox_policy
-      })
+      AppServerCommon.send_rpc(
+        state_with_new_thread,
+        "turn/start",
+        turn_start_params(state_with_new_thread, input)
+      )
 
     %{
       state
@@ -293,12 +281,7 @@ defmodule Duet.Entry do
           Logger.info("[Duet.Entry:#{state.name}] /compact: summary captured")
 
           state =
-            AppServerCommon.send_rpc(state, "thread/start", %{
-              approvalPolicy: state.approval_policy,
-              sandbox: state.thread_sandbox,
-              cwd: state.cwd,
-              dynamicTools: []
-            })
+            AppServerCommon.send_rpc(state, "thread/start", thread_start_params(state))
 
           %{
             state
@@ -410,6 +393,31 @@ defmodule Duet.Entry do
   end
 
   defp handle_notification(_method, _params, state), do: state
+
+  defp thread_start_params(state) do
+    %{
+      approvalPolicy: state.approval_policy,
+      sandbox: state.thread_sandbox,
+      cwd: state.cwd,
+      dynamicTools: []
+    }
+    |> maybe_put(:model, state.model)
+    |> maybe_put(:serviceTier, state.service_tier)
+  end
+
+  defp turn_start_params(state, input) do
+    %{
+      threadId: state.thread_id,
+      input: input,
+      cwd: state.cwd,
+      approvalPolicy: state.approval_policy,
+      sandboxPolicy: state.turn_sandbox_policy
+    }
+    |> maybe_put(:effort, state.reasoning_effort)
+  end
+
+  defp maybe_put(params, _key, nil), do: params
+  defp maybe_put(params, key, value), do: Map.put(params, key, value)
 
   defp build_compact_summary_prompt do
     """

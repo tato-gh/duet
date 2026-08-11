@@ -75,6 +75,9 @@ entries:
   - name: "chat_play"
     command: "codex app-server"
     role: "雑談・遊びの相手。気軽で自然な会話を続ける。"
+    model: "gpt-5.6-luna"
+    reasoning_effort: "high"
+    service_tier: "fast"
     approval_policy: "never"
     thread_sandbox: "read-only"
     turn_sandbox_policy:
@@ -84,6 +87,7 @@ entries:
   - name: "work_partner"
     command: "codex app-server"
     role: "作業伴走者。実装・設計を継続的に相談し、必要に応じて案・反証・統合で改善する。"
+    # service_tier: "fast"
     approval_policy: "never"
     thread_sandbox: "workspace-write"
     turn_sandbox_policy:
@@ -106,13 +110,16 @@ entry:
 | `name` | 必須 | entry 名。skill や RPC 呼び出しで使う識別子 |
 | `command` | `codex app-server` | app-server 起動コマンド |
 | `role` | `""` | thread の初回ターンだけに付与するロール文 |
+| `model` | 未指定 | `thread/start` に渡すモデル。例: `"gpt-5.6-luna"` |
+| `reasoning_effort` | 未指定 | `turn/start` に渡す推論強度。例: `"high"` |
+| `service_tier` | 未指定 | `thread/start` の `serviceTier`。例: `"fast"` |
 | `approval_policy` | `"never"` | app-server に渡す approvalPolicy |
 | `thread_sandbox` | `"read-only"` | `thread/start` に渡す sandbox |
 | `turn_sandbox_policy` | `{"type":"readOnly","networkAccess":false}` | `turn/start` に渡す sandboxPolicy |
 
 `DUET.md` がない場合、Duet は entry なしのデフォルト設定で起動します。
 
-Duet は `DUET.md` を起動時にだけ読みます。ファイル変更の監視や hot reload はしないため、entry の追加・削除や role の変更を反映するには Duet を再起動してください。
+Duet は `DUET.md` を起動時にだけ読みます。ファイル変更の監視や hot reload はしないため、entry の追加・削除、role、`model`、`reasoning_effort`、`service_tier` の変更を反映するには Duet を再起動してください。
 
 ## 操作
 

@@ -29,15 +29,23 @@ defmodule Duet.EntryTest do
     start_entry!(
       name: "compact-success",
       role: "レビュー担当",
+      model: "gpt-5.6-luna",
+      reasoning_effort: "high",
+      service_tier: "fast",
       command: fake_app_server_command(log_path)
     )
 
     assert {:ok, "引き継ぎを確認しました"} = Duet.post("compact-success", "/compact")
 
     received = read_received_messages(log_path)
+    thread_starts = Enum.filter(received, &(Map.get(&1, "method") == "thread/start"))
     turn_starts = Enum.filter(received, &(Map.get(&1, "method") == "turn/start"))
 
+    assert length(thread_starts) == 2
+    assert Enum.all?(thread_starts, &(get_in(&1, ["params", "model"]) == "gpt-5.6-luna"))
+    assert Enum.all?(thread_starts, &(get_in(&1, ["params", "serviceTier"]) == "fast"))
     assert length(turn_starts) == 2
+    assert Enum.all?(turn_starts, &(get_in(&1, ["params", "effort"]) == "high"))
 
     [summary_turn, handoff_turn] = turn_starts
     assert get_in(summary_turn, ["params", "threadId"]) == "thread-1"
@@ -53,6 +61,25 @@ defmodule Duet.EntryTest do
     assert String.contains?(handoff_text, "前スレッドからの引き継ぎ情報です")
     assert String.contains?(handoff_text, "<handoff>\n引き継ぎ要約\n</handoff>")
     assert String.contains?(handoff_text, "ユーザーからの新しい作業依頼ではなく")
+  end
+
+  test "/clear applies the entry service tier to the new thread", %{tmp_dir: tmp_dir} do
+    log_path = Path.join(tmp_dir, "app_server.log")
+    File.write!(log_path, "")
+
+    start_entry!(
+      name: "clear-fast",
+      service_tier: "fast",
+      command: fake_app_server_command(log_path)
+    )
+
+    assert {:ok, ""} = Duet.post("clear-fast", "/clear")
+
+    received = read_received_messages(log_path)
+    thread_starts = Enum.filter(received, &(Map.get(&1, "method") == "thread/start"))
+
+    assert length(thread_starts) == 2
+    assert Enum.all?(thread_starts, &(get_in(&1, ["params", "serviceTier"]) == "fast"))
   end
 
   test "/compact returns an error when the summary is empty", %{tmp_dir: tmp_dir} do
@@ -79,6 +106,9 @@ defmodule Duet.EntryTest do
       name: Keyword.fetch!(opts, :name),
       command: Keyword.fetch!(opts, :command),
       role: Keyword.get(opts, :role, ""),
+      model: Keyword.get(opts, :model),
+      reasoning_effort: Keyword.get(opts, :reasoning_effort),
+      service_tier: Keyword.get(opts, :service_tier),
       approval_policy: "never",
       thread_sandbox: "read-only",
       turn_sandbox_policy: %{"type" => "readOnly", "networkAccess" => false}

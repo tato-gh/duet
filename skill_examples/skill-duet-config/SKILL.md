@@ -60,6 +60,9 @@ Codex CLI のバージョン差分が疑わしい場合は `codex app-server --h
 | `entries[].name` | entry の識別名 | 必須。skill や RPC 呼び出しで使うため、既存名の変更は確認する |
 | `entries[].command` | app-server 起動コマンド | 通常は `"codex app-server"`。`--listen`、`--config`、`--enable` などを足す場合は影響範囲を確認する |
 | `entries[].role` | entry の初回 turn に渡す役割説明 | 用途に合わせて整理してよい。長すぎる一般論より、任せたい振る舞いと判断基準を短く書く |
+| `entries[].model` | `thread/start` に渡すモデル | 未指定なら Codex の既定モデル。例: `"gpt-5.6-luna"` |
+| `entries[].reasoning_effort` | `turn/start` に渡す推論強度 | 未指定なら Codex の既定。GPT-5.6 では `none`、`low`、`medium`、`high`、`xhigh`、`max` を使える |
+| `entries[].service_tier` | `thread/start` に渡す app-server のサービス階層 | 未指定なら標準。Fastを使う場合は `"fast"`。対応モデル、利用形態、クレジット消費に注意する |
 | `entries[].approval_policy` | `turn/start` などに渡す承認ポリシー | 代表値は `"never"`、`"on-request"`、`"on-failure"`、`"untrusted"`。権限運用に関わるため変更は確認する |
 | `entries[].thread_sandbox` | `thread/start` に渡す sandbox mode | 代表値は `"read-only"`、`"workspace-write"`、`"danger-full-access"`。thread 作成時の権限に関わるため変更は確認する |
 | `entries[].turn_sandbox_policy.type` | `turn/start` に渡す sandbox policy 種別 | 代表値は `"readOnly"`、`"workspaceWrite"`、`"dangerFullAccess"`。`"externalSandbox"` は外部 sandbox 前提なので、採用前に確認する |
@@ -108,6 +111,7 @@ entries:
   - name: "work_partner"
     command: "codex app-server"
     role: "作業伴走者。設計、実装、レビューを継続的に相談する。"
+    # service_tier: "fast"
     approval_policy: "never"
     thread_sandbox: "workspace-write"
     turn_sandbox_policy:
@@ -125,5 +129,5 @@ entries:
 
 ## 運用メモ
 
-- entry の追加、削除、role 変更を反映するには Duet を再起動する
+- entry の追加、削除、role、`model`、`reasoning_effort`、`service_tier` の変更を反映するには Duet を再起動する
 ```
