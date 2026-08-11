@@ -60,7 +60,8 @@ defmodule Duet.Entry do
       buf: "",
       response_buf: "",
       pending_call: nil,
-      pending_compact_summary: nil
+      pending_compact_summary: nil,
+      pending_posts: :queue.new()
     }
 
     send(self(), :do_initialize)
@@ -78,48 +79,18 @@ defmodule Duet.Entry do
   end
 
   @impl true
-  def handle_call({:post, "/clear"}, from, state) do
-    state =
-      AppServerCommon.send_rpc(state, "thread/start", thread_start_params(state))
-
-    {:noreply,
-     %{state | status: :session_ready, pending_method: :thread_start, pending_call: from}}
-  end
-
-  @impl true
-  def handle_call({:post, "/compact"}, from, state) do
-    state =
-      AppServerCommon.send_rpc(
-        state,
-        "turn/start",
-        turn_start_params(state, [%{type: "text", text: build_compact_summary_prompt()}])
-      )
-
-    {:noreply,
-     %{
-       state
-       | status: :compacting_summary,
-         pending_method: :turn_start,
-         pending_call: from,
-         response_buf: ""
-     }}
-  end
-
-  @impl true
   def handle_call({:post, prompt}, from, state) do
-    input = build_turn_input(state, prompt)
+    {:noreply, start_post(state, prompt, from)}
+  end
 
-    state =
-      AppServerCommon.send_rpc(state, "turn/start", turn_start_params(state, input))
+  @impl true
+  def handle_call({:enqueue, prompt}, _from, state) do
+    {:reply, :ok, enqueue_post(state, prompt)}
+  end
 
-    {:noreply,
-     %{
-       state
-       | status: :waiting,
-         pending_method: :turn_start,
-         pending_call: from,
-         response_buf: ""
-     }}
+  @impl true
+  def handle_cast({:enqueue, prompt}, state) do
+    {:noreply, enqueue_post(state, prompt)}
   end
 
   @impl true
@@ -219,13 +190,7 @@ defmodule Duet.Entry do
   defp handle_response(_id, result, %{pending_method: :thread_start} = state) do
     thread_id = get_in(result, ["thread", "id"])
     state = %{state | thread_id: thread_id, status: :idle, pending_method: nil, first_turn: true}
-
-    if state.pending_call do
-      GenServer.reply(state.pending_call, {:ok, ""})
-      %{state | pending_call: nil}
-    else
-      state
-    end
+    complete_post(state, {:ok, ""})
   end
 
   defp handle_response(_id, _result, %{pending_method: :turn_start} = state) do
@@ -239,18 +204,16 @@ defmodule Duet.Entry do
   end
 
   defp handle_rpc_error(error, state) do
-    if state.pending_call do
-      GenServer.reply(state.pending_call, {:error, {:rpc_error, error}})
-    end
+    state =
+      %{
+        state
+        | status: :idle,
+          pending_method: nil,
+          pending_compact_summary: nil,
+          response_buf: ""
+      }
 
-    %{
-      state
-      | status: :idle,
-        pending_method: nil,
-        pending_call: nil,
-        pending_compact_summary: nil,
-        response_buf: ""
-    }
+    complete_post(state, {:error, {:rpc_error, error}})
   end
 
   defp handle_notification("turn/completed", params, %{status: :compacting_summary} = state) do
@@ -260,11 +223,8 @@ defmodule Duet.Entry do
           "[Duet.Entry:#{state.name}] compact summary turn ended with status: #{status}"
         )
 
-        if state.pending_call do
-          GenServer.reply(state.pending_call, {:error, status})
-        end
-
-        %{state | status: :idle, pending_method: nil, pending_call: nil, response_buf: ""}
+        state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+        complete_post(state, {:error, status})
 
       _ ->
         summary = String.trim(state.response_buf)
@@ -272,11 +232,8 @@ defmodule Duet.Entry do
         if summary == "" do
           Logger.error("[Duet.Entry:#{state.name}] /compact: summary was empty")
 
-          if state.pending_call do
-            GenServer.reply(state.pending_call, {:error, :empty_compact_summary})
-          end
-
-          %{state | status: :idle, pending_method: nil, pending_call: nil, response_buf: ""}
+          state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+          complete_post(state, {:error, :empty_compact_summary})
         else
           Logger.info("[Duet.Entry:#{state.name}] /compact: summary captured")
 
@@ -299,27 +256,22 @@ defmodule Duet.Entry do
       status when status in ["failed", "interrupted"] ->
         Logger.error("[Duet.Entry:#{state.name}] turn ended with status: #{status}")
 
-        if state.pending_call do
-          GenServer.reply(state.pending_call, {:error, status})
-        end
-
-        %{state | status: :idle, pending_method: nil, pending_call: nil, response_buf: ""}
+        state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+        complete_post(state, {:error, status})
 
       _ ->
         response = String.trim(state.response_buf)
 
-        if state.pending_call do
-          GenServer.reply(state.pending_call, {:ok, response})
-        end
+        state =
+          %{
+            state
+            | status: :idle,
+              pending_method: nil,
+              response_buf: "",
+              first_turn: false
+          }
 
-        %{
-          state
-          | status: :idle,
-            pending_method: nil,
-            pending_call: nil,
-            response_buf: "",
-            first_turn: false
-        }
+        complete_post(state, {:ok, response})
     end
   end
 
@@ -375,24 +327,82 @@ defmodule Duet.Entry do
   defp handle_notification("turn/failed", params, state) do
     Logger.error("[Duet.Entry:#{state.name}] turn/failed: #{inspect(params)}")
 
-    if state.pending_call do
-      GenServer.reply(state.pending_call, {:error, :turn_failed})
-    end
-
-    %{state | status: :idle, pending_method: nil, pending_call: nil, response_buf: ""}
+    state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+    complete_post(state, {:error, :turn_failed})
   end
 
   defp handle_notification("turn/cancelled", params, state) do
     Logger.warning("[Duet.Entry:#{state.name}] turn/cancelled: #{inspect(params)}")
 
-    if state.pending_call do
-      GenServer.reply(state.pending_call, {:error, :turn_cancelled})
-    end
-
-    %{state | status: :idle, pending_method: nil, pending_call: nil, response_buf: ""}
+    state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+    complete_post(state, {:error, :turn_cancelled})
   end
 
   defp handle_notification(_method, _params, state), do: state
+
+  defp enqueue_post(%{status: :idle} = state, prompt), do: start_post(state, prompt, nil)
+
+  defp enqueue_post(state, prompt) do
+    %{state | pending_posts: :queue.in(prompt, state.pending_posts)}
+  end
+
+  defp start_post(state, "/clear", from) do
+    state = AppServerCommon.send_rpc(state, "thread/start", thread_start_params(state))
+
+    %{state | status: :session_ready, pending_method: :thread_start, pending_call: from}
+  end
+
+  defp start_post(state, "/compact", from) do
+    state =
+      AppServerCommon.send_rpc(
+        state,
+        "turn/start",
+        turn_start_params(state, [%{type: "text", text: build_compact_summary_prompt()}])
+      )
+
+    %{
+      state
+      | status: :compacting_summary,
+        pending_method: :turn_start,
+        pending_call: from,
+        response_buf: ""
+    }
+  end
+
+  defp start_post(state, prompt, from) do
+    input = build_turn_input(state, prompt)
+    state = AppServerCommon.send_rpc(state, "turn/start", turn_start_params(state, input))
+
+    %{
+      state
+      | status: :waiting,
+        pending_method: :turn_start,
+        pending_call: from,
+        response_buf: ""
+    }
+  end
+
+  defp complete_post(state, result) do
+    if state.pending_call do
+      GenServer.reply(state.pending_call, result)
+    end
+
+    state
+    |> Map.put(:pending_call, nil)
+    |> start_next_post()
+  end
+
+  defp start_next_post(%{status: :idle, pending_posts: pending_posts} = state) do
+    case :queue.out(pending_posts) do
+      {{:value, prompt}, pending_posts} ->
+        state
+        |> Map.put(:pending_posts, pending_posts)
+        |> start_post(prompt, nil)
+
+      {:empty, _pending_posts} ->
+        state
+    end
+  end
 
   defp thread_start_params(state) do
     %{

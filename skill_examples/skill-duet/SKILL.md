@@ -1,6 +1,6 @@
 ---
 name: skill-duet
-description: 「duetを使って」「duetで～」「別視点で継続相談して」「同じ相手に続けて依頼して」など、起動中の duet entry (AI) を文脈が続く伴走相手として活用するときに使う。利用可能 entry を確認し、用途に合う entry を選んで post から会話する。
+description: 「duetを使って」「duetで～」「別視点で継続相談して」「同じ相手に続けて依頼して」など、起動中の duet entry (AI) を文脈が続く伴走相手として活用するときに使う。利用可能 entry を確認し、用途に応じて post、post_all、cast_all から会話・通知する。
 ---
 
 # skill-duet
@@ -40,7 +40,7 @@ elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/entries.exs
 entry はあなたと同じプロジェクトルートで動く。ファイル参照やファイル操作の可否は、その entry の `approval_policy`、`thread_sandbox`、`turn_sandbox_policy` に従う。
 
 duet から起動された entry のコマンドには `CODEX_DUET_ENTRY=1` が設定される。
-この skill の `post.exs` は、この環境変数を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
+この skill の `post.exs`、`post_all.exs`、`cast_all.exs` は、この環境変数を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
 hook や独自スクリプトでも duet 経由の実行を判定したい場合は、この環境変数を参照する。
 
 ## entry の選び方
@@ -69,6 +69,20 @@ EOF
 )"
 ```
 
+全 entry へ送り、全件の完了を待つ（作業中の entry は `busy` を返す）:
+
+```bash
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post_all.exs "/compact"
+```
+
+全 entry に後続の処理を予約し、モデルの処理完了を待たずに戻る:
+
+```bash
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/cast_all.exs "ブランチを fix/login に切り替えました。以後の作業対象はこのブランチです。"
+```
+
+`post_all.exs` は `post.exs` の全 entry 版であり、作業中の entry には送信せず、結果として `{:error, :busy}` を返す。`cast_all.exs` は各 entry がメッセージの処理予約を受け付けたことを確認してから戻る。予約されたメッセージは同じ entry では到着順に処理され、entry 間では並行して進む。AI エージェントは、ブランチ変更のように回答を待たず後続の作業へ反映したい通知に `cast_all.exs` を使う。
+
 ## 操作
 
 - `/clear`: entry の thread をリセットする
@@ -93,6 +107,9 @@ EOF
 
 複数視点の比較:
 複数 entry に個別に同じ論点を渡し、違いを見る。回答後にローカル側で統合する。
+
+全体への状態共有:
+全entryを要約してから続ける場合は `post_all.exs "/compact"` を使う。ブランチ変更など、全entryに後続の文脈として伝えればよい事項は `cast_all.exs` を使う。
 
 ## プロンプトの温度感
 

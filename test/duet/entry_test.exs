@@ -82,6 +82,65 @@ defmodule Duet.EntryTest do
     assert Enum.all?(thread_starts, &(get_in(&1, ["params", "serviceTier"]) == "fast"))
   end
 
+  test "post_all returns busy and cast_all reserves a queued prompt", %{
+    tmp_dir: tmp_dir
+  } do
+    log_path = Path.join(tmp_dir, "app_server.log")
+    File.write!(log_path, "")
+
+    start_entry!(
+      name: "broadcast",
+      command: fake_app_server_command(log_path, turn_delay_ms: 200)
+    )
+
+    first_post = Task.async(fn -> Duet.post("broadcast", "first prompt") end)
+    wait_until_status("broadcast", :waiting)
+
+    assert {:ok, ["broadcast"]} = Duet.cast_all("branch changed")
+    assert {:error, :busy} = Duet.post("broadcast", "direct prompt")
+
+    assert [{"broadcast", {:error, :busy}}] = Duet.post_all("busy prompt")
+
+    assert {:ok, "引き継ぎを確認しました"} = Task.await(first_post)
+    wait_until_idle("broadcast")
+
+    received = read_received_messages(log_path)
+
+    turn_inputs =
+      received
+      |> Enum.filter(&(Map.get(&1, "method") == "turn/start"))
+      |> Enum.map(&input_text/1)
+
+    assert Enum.any?(turn_inputs, &String.contains?(&1, "first prompt"))
+    assert Enum.any?(turn_inputs, &String.contains?(&1, "branch changed"))
+    refute Enum.any?(turn_inputs, &String.contains?(&1, "busy prompt"))
+  end
+
+  test "post_all waits for every running entry", %{tmp_dir: tmp_dir} do
+    alpha_log_path = Path.join(tmp_dir, "alpha.log")
+    beta_log_path = Path.join(tmp_dir, "beta.log")
+    File.write!(alpha_log_path, "")
+    File.write!(beta_log_path, "")
+
+    start_entry!(name: "beta", command: fake_app_server_command(beta_log_path))
+    start_entry!(name: "alpha", command: fake_app_server_command(alpha_log_path))
+
+    assert [
+             {"alpha", {:ok, "引き継ぎを確認しました"}},
+             {"beta", {:ok, "引き継ぎを確認しました"}}
+           ] = Duet.post_all("shared prompt")
+
+    assert alpha_log_path
+           |> read_received_messages()
+           |> Enum.filter(&(Map.get(&1, "method") == "turn/start"))
+           |> Enum.any?(&(input_text(&1) |> String.contains?("shared prompt")))
+
+    assert beta_log_path
+           |> read_received_messages()
+           |> Enum.filter(&(Map.get(&1, "method") == "turn/start"))
+           |> Enum.any?(&(input_text(&1) |> String.contains?("shared prompt")))
+  end
+
   test "/compact returns an error when the summary is empty", %{tmp_dir: tmp_dir} do
     log_path = Path.join(tmp_dir, "app_server.log")
     File.write!(log_path, "")
@@ -119,25 +178,31 @@ defmodule Duet.EntryTest do
   end
 
   defp wait_until_idle(name) do
+    wait_until_status(name, :idle)
+  end
+
+  defp wait_until_status(name, expected_status) do
     registered_name = {:via, Registry, {Duet.EntryRegistry, name}}
 
     case :sys.get_state(registered_name).status do
-      :idle ->
+      ^expected_status ->
         :ok
 
       _status ->
         Process.sleep(10)
-        wait_until_idle(name)
+        wait_until_status(name, expected_status)
     end
   end
 
   defp fake_app_server_command(log_path, opts \\ []) do
     script_path = Path.expand("../support/fake_app_server.script", __DIR__)
     summary = Keyword.get(opts, :summary, "引き継ぎ要約")
+    turn_delay_ms = Keyword.get(opts, :turn_delay_ms, 0)
 
     [
       "FAKE_APP_SERVER_LOG=#{shell_escape(log_path)}",
       "FAKE_COMPACT_SUMMARY=#{shell_escape(summary)}",
+      "FAKE_TURN_DELAY_MS=#{turn_delay_ms}",
       "elixir #{shell_escape(script_path)}"
     ]
     |> Enum.join(" ")

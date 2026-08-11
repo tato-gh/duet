@@ -1,6 +1,7 @@
 log_path = System.fetch_env!("FAKE_APP_SERVER_LOG")
 summary = System.get_env("FAKE_COMPACT_SUMMARY", "引き継ぎ要約")
 handoff_response = System.get_env("FAKE_HANDOFF_RESPONSE", "引き継ぎを確認しました")
+turn_delay_ms = System.get_env("FAKE_TURN_DELAY_MS", "0") |> String.to_integer()
 
 append_log = fn event ->
   File.write!(log_path, JSON.encode!(event) <> "\n", [:append])
@@ -38,6 +39,8 @@ loop = fn loop, thread_count ->
           loop.(loop, next_thread_count)
 
         "turn/start" ->
+          if turn_delay_ms > 0, do: Process.sleep(turn_delay_ms)
+
           text =
             message
             |> get_in(["params", "input"])

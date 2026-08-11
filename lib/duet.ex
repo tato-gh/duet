@@ -4,6 +4,7 @@ defmodule Duet do
   """
 
   @timeout 600_000
+  @reservation_timeout 5_000
 
   @doc """
   Returns the currently running entries.
@@ -43,6 +44,73 @@ defmodule Duet do
       nil -> {:error, :not_found}
       _pid -> GenServer.call(name, {:post, prompt}, @timeout)
     end
+  end
+
+  @doc """
+  Sends a prompt to every running entry and waits for all responses.
+
+  This is the broadcast equivalent of `post/2`: busy entries return `{:error, :busy}`.
+  Results are returned as `{entry_name, result}` tuples, ordered by entry name.
+  """
+  def post_all(prompt) when is_binary(prompt) do
+    names = entry_names()
+
+    names
+    |> Task.async_stream(
+      fn name -> {name, post(name, prompt)} end,
+      timeout: @timeout,
+      on_timeout: :kill_task,
+      ordered: true,
+      max_concurrency: max(length(names), 1)
+    )
+    |> Enum.zip(names)
+    |> Enum.map(fn
+      {{:ok, {name, result}}, _expected_name} -> {name, result}
+      {{:exit, reason}, name} -> {name, {:error, reason}}
+    end)
+  end
+
+  @doc """
+  Reserves processing of a prompt for every running entry without waiting for responses.
+
+  Returns after each listed entry has accepted the reservation. It does not wait for
+  the entry's model processing or response.
+  """
+  def cast_all(prompt) when is_binary(prompt) do
+    names = entry_names()
+
+    names
+    |> Task.async_stream(
+      fn name -> {name, reserve(name, prompt)} end,
+      timeout: @reservation_timeout,
+      on_timeout: :kill_task,
+      ordered: true,
+      max_concurrency: max(length(names), 1)
+    )
+    |> Enum.flat_map(fn
+      {:ok, {entry_name, :ok}} -> [entry_name]
+      _ -> []
+    end)
+    |> then(&{:ok, &1})
+  end
+
+  defp reserve(entry_name, prompt) do
+    name = entry_name(entry_name)
+
+    case GenServer.whereis(name) do
+      nil -> {:error, :not_found}
+      _pid -> GenServer.call(name, {:enqueue, prompt}, @reservation_timeout)
+    end
+  end
+
+  defp entry_names do
+    entries()
+    |> Enum.map(& &1.name)
+    |> Enum.sort()
+  end
+
+  defp entry_name(entry_name) do
+    {:via, Registry, {Duet.EntryRegistry, entry_name}}
   end
 end
 
