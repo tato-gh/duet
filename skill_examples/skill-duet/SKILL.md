@@ -97,6 +97,8 @@ elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/overview_all.ex
 
 `overview.exs` と `overview_all.exs` は、entry 自身に role、現在も有効な経緯・文脈、未完了事項の有無を確認できる事実だけで最大3項目に説明させる。未完了事項が明確にある場合だけ、その状況と未解決点を含める。担当作業の確認に限らず、相談役や待機中の entry の再紹介にも使える。Duet の内部状態を直接照会するコマンドではないため、回答は entry が保持している文脈に基づく。オーケストレータだけを compact したあとなど、各 entry とのやりとりを再開する前に使う。
 
+`post.exs`、`post_all.exs`、`overview.exs`、`overview_all.exs` の応答待機時間は、Duet 起動時の `DUET_TIMEOUT_MINUTES` で設定できる。未指定時は20分で、作業量に合わせて起動前に変更する。
+
 ## 操作
 
 - `/clear`: entry の thread をリセットする

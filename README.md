@@ -51,6 +51,14 @@ ln -s ~/duet/skill_examples/skill-duet-config .claude/skills/skill-duet-config
 ~/duet/bin/duet.escript /path/to/project
 ```
 
+entry 応答の待機時間はデフォルトで20分です。起動時に `DUET_TIMEOUT_MINUTES` を正の整数（分）で指定すると上書きできます。
+
+```bash
+DUET_TIMEOUT_MINUTES=30 ~/duet/bin/duet.escript /path/to/project
+```
+
+不正な値を指定した場合は起動に失敗します。環境変数の変更は、Duet を再起動して反映します。付属の skill スクリプトはこのサーバー側設定の完了まで待機するため、別の固定上限で先に終了しません。
+
 ### 4. skill 経由で試す
 
 プロジェクトディレクトリで、AI エージェントに自然文で依頼します。
@@ -119,7 +127,7 @@ entry:
 
 `DUET.md` がない場合、Duet は entry なしのデフォルト設定で起動します。
 
-Duet は `DUET.md` を起動時にだけ読みます。ファイル変更の監視や hot reload はしないため、entry の追加・削除、role、`model`、`reasoning_effort`、`service_tier` の変更を反映するには Duet を再起動してください。
+Duet は `DUET.md` と `DUET_TIMEOUT_MINUTES` を起動時にだけ読みます。ファイル変更の監視や hot reload はしないため、entry の追加・削除、role、`model`、`reasoning_effort`、`service_tier`、タイムアウト設定の変更を反映するには Duet を再起動してください。
 
 ## 操作
 
@@ -135,7 +143,7 @@ Node.set_cookie(:duet_cookie)
 Node.connect(:duet@localhost)
 
 :erpc.call(:duet@localhost, Duet, :entries, [], 5_000)
-:erpc.call(:duet@localhost, Duet, :post, ["work_partner", "相談したい内容"], 300_000)
+:erpc.call(:duet@localhost, Duet, :post, ["work_partner", "相談したい内容"], :infinity)
 ```
 
 - `Duet.entries/0` returns running entries as `%{name: name, role: role}`.

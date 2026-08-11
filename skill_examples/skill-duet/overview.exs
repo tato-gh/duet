@@ -35,7 +35,7 @@ case System.argv() do
     node = DuetScript.get_node_name() |> DuetScript.node_atom()
     Node.connect(node)
 
-    case :erpc.call(node, Duet, :overview, [entry_name], 600_000) do
+    case :erpc.call(node, Duet, :overview, [entry_name], :infinity) do
       {:ok, response} ->
         IO.puts(response)
 

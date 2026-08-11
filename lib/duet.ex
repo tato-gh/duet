@@ -3,8 +3,8 @@ defmodule Duet do
   Public API used by remote Erlang callers.
   """
 
-  @timeout 600_000
   @reservation_timeout 5_000
+  @post_all_timeout_grace 1_000
   @overview_prompt """
   オーケストレータに向けて、この entry の overview を返してください。新しい作業依頼ではありません。
   確認できる事実だけを、最大 3 項目・各 1 文の箇条書きで簡潔に説明してください。
@@ -52,7 +52,7 @@ defmodule Duet do
 
     case GenServer.whereis(name) do
       nil -> {:error, :not_found}
-      _pid -> GenServer.call(name, {:post, prompt}, @timeout)
+      _pid -> GenServer.call(name, {:post, prompt}, Duet.Timeout.request_timeout_ms())
     end
   end
 
@@ -73,11 +73,12 @@ defmodule Duet do
   """
   def post_all(prompt) when is_binary(prompt) do
     names = entry_names()
+    timeout = Duet.Timeout.request_timeout_ms()
 
     names
     |> Task.async_stream(
       fn name -> {name, post(name, prompt)} end,
-      timeout: @timeout,
+      timeout: timeout + @post_all_timeout_grace,
       on_timeout: :kill_task,
       ordered: true,
       max_concurrency: max(length(names), 1)

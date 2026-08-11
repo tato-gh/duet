@@ -30,6 +30,7 @@ defmodule Duet.CLI do
 
     with :ok <- Duet.Config.set_config_file(duet_path),
          {:ok, config} <- Duet.Config.parse(duet_path),
+         :ok <- Duet.Timeout.configure_from_env(),
          :ok <- start_node(config.node_name),
          {:ok, _pid} <- Duet.Application.start(:normal, []) do
       :ok

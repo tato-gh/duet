@@ -36,7 +36,7 @@ case System.argv() do
     node = DuetScript.get_node_name() |> DuetScript.node_atom()
     Node.connect(node)
 
-    case :erpc.call(node, Duet, :post_all, [prompt], 600_000) do
+    case :erpc.call(node, Duet, :post_all, [prompt], :infinity) do
       results when is_list(results) ->
         Enum.each(results, fn
           {entry, {:ok, response}} -> IO.puts("[#{entry}]\n#{response}\n")

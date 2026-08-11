@@ -32,7 +32,7 @@ Node.set_cookie(:duet_cookie)
 node = DuetScript.get_node_name() |> DuetScript.node_atom()
 Node.connect(node)
 
-case :erpc.call(node, Duet, :overview_all, [], 600_000) do
+case :erpc.call(node, Duet, :overview_all, [], :infinity) do
   results when is_list(results) ->
     Enum.each(results, fn
       {entry, {:ok, response}} -> IO.puts("[#{entry}]\n#{response}\n")
