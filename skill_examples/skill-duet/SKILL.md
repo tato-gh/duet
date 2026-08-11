@@ -1,6 +1,6 @@
 ---
 name: skill-duet
-description: 「duetを使って」「duetで～」「別視点で継続相談して」「同じ相手に続けて依頼して」など、起動中の duet entry (AI) を文脈が続く伴走相手として活用するときに使う。利用可能 entry を確認し、用途に合う entry を選んで post/post_parallel から会話する。
+description: 「duetを使って」「duetで～」「別視点で継続相談して」「同じ相手に続けて依頼して」など、起動中の duet entry (AI) を文脈が続く伴走相手として活用するときに使う。利用可能 entry を確認し、用途に合う entry を選んで post から会話する。
 ---
 
 # skill-duet
@@ -19,13 +19,12 @@ duet は「相談先」だけではなく、会話や作業に参加するパー
 - 作業や思考の途中に entry を巻き込みたいとき
 - 一部の整理、下調べ、反証、レビューを任せたいとき
 - 自分の思い込みや見落としを減らしたいとき
-- 複数 entry に同じ論点を投げて比較したいとき
+- 複数 entry の別視点を比較したいとき
 
 ## duet で得られること
 
 - 継続性: 同じ entry と会話を続けられるため、前提説明を減らせる
 - 別視点: 別 role の相手に見てもらうことで、思い込みや見落としを減らせる
-- 並列性: 複数 entry に同時に投げて、案や反証を比較できる
 - 役割分担: 雑談、伴走、レビュー、判定などを entry ごとに分けられる
 - 文脈分離: 話題ごとに entry を分けて、不要な文脈混入を避けられる
 
@@ -41,7 +40,7 @@ elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/entries.exs
 entry はあなたと同じプロジェクトルートで動く。ファイル参照やファイル操作の可否は、その entry の `approval_policy`、`thread_sandbox`、`turn_sandbox_policy` に従う。
 
 duet から起動された entry のコマンドには `CODEX_DUET_ENTRY=1` が設定される。
-この skill の `post.exs` と `post_parallel.exs` は、この環境変数を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
+この skill の `post.exs` は、この環境変数を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
 hook や独自スクリプトでも duet 経由の実行を判定したい場合は、この環境変数を参照する。
 
 ## entry の選び方
@@ -70,28 +69,6 @@ EOF
 )"
 ```
 
-複数 entry へ並行送信する:
-
-```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post_parallel.exs ENTRY1 "PROMPT1" ENTRY2 "PROMPT2"
-```
-
-複数 entry に長文・複数行を送る場合:
-
-```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post_parallel.exs \
-  entry1 "$(cat <<'EOF'
-プロンプト1
-複数行
-EOF
-)" \
-  entry2 "$(cat <<'EOF'
-プロンプト2
-複数行
-EOF
-)"
-```
-
 ## 操作
 
 - `/clear`: entry の thread をリセットする
@@ -114,8 +91,8 @@ EOF
 判定:
 複数案から選ぶ。論点、各案、根拠、制約、残る懸念を短く渡す。伴走時の空気感は持ち込まず、判断材料を明示する。
 
-並列比較:
-複数 entry に同じ論点を投げて、違いを見る。回答後にローカル側で統合する。
+複数視点の比較:
+複数 entry に個別に同じ論点を渡し、違いを見る。回答後にローカル側で統合する。
 
 ## プロンプトの温度感
 
