@@ -159,7 +159,6 @@ defmodule Duet.Application do
       end
 
     children = [
-      Duet.BridgeLog,
       {Registry, keys: :unique, name: Duet.EntryRegistry},
       Duet.EntrySupervisor
     ]
