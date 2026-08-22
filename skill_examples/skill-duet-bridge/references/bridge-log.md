@@ -2,43 +2,21 @@
 
 Use this reference before the first bridge log read or write.
 
-bridge logは、bridge sideとplayerの直接会話を補助するローカル活動ログである。
+bridge logは、bridge sideとplayerの直接会話を補助するDuet process-localの活動ログである。
 コード、テスト、通常ドキュメント、会話の代わりにはしない。
 
-## 保存場所
+eventはDuet processのメモリに時系列で保存され、Git repositoryとworking treeを変更しない。
+Duetを終了または再起動するとeventと既読位置は失われる。
 
-専用notes refを使う。
+## event
 
-```text
-refs/notes/duet-bridge-local
-```
+各eventは次の情報を持つ。
 
-このrefは通常branchとは別であり、working treeや通常の`git diff`を変更しない。
-`local`は用途を示す命名であり、Gitによるpush防止機能ではない。
-
-bridge sideはbridge logを初めて使うとき、現在の`HEAD`を1つのlog anchorとして決める。
-同じbridge作業中はbranchが変わってもanchorを変えず、完全なobject IDをplayerへの依頼に含める。
-
-```bash
-git rev-parse --verify HEAD
-```
-
-有効な`HEAD`がない場合はbridge logを初期化せず、直接会話だけを使う。
-
-## 記録形式
-
-本文は自由記述だが、各発信の先頭に`sender`と`branch`を必ず書く。
-
-```text
----
-sender: <bridgeまたはentry名>
-branch: <branch名またはdetached@commit>
-
-<自由記述>
-```
-
-`sender`はコマンド実行者ではなく、その情報を発信した主体を示す。
-bridge sideがplayerを代理して書く場合も、playerのentry名を記す。
+- `sequence`: Duetが付ける単調増加番号
+- `sender`: 発信主体。playerは`CODEX_DUET_ENTRY_NAME`、bridge sideは`bridge`
+- `branch`: 発信時のbranch。detached HEADでは`detached@<commit>`
+- `body`: 自由記述
+- `inserted_at`: Duetが付ける発信時刻
 
 記録に向く内容:
 
@@ -55,32 +33,34 @@ bridge sideがplayerを代理して書く場合も、playerのentry名を記す�
 - 長いコマンド出力やテストログ
 - 永続的な仕様や重要判断の唯一の原本
 
-## 読む・追記する
+既存の前提や経緯を繰り返さず、前回から変わったことだけを記録する。
+詳細な調査結果、反復ログ、成果物の本文は、通常の成果物または直接会話へ残す。
 
-`<ANCHOR>`にはbridge sideが共有した完全なobject IDを使う。
+## CLI
 
-```bash
-git notes --ref=duet-bridge-local show <ANCHOR>
-```
+bridge sideとplayerは同じ`bridge_log.exs`を使う。
+playerからの`read`と`publish`はDuetの再帰呼び出しではないため許可される。
 
-まだnoteがない場合、`show`が失敗しても空のlogとして扱う。
-
-追記例:
+未読eventを読み、呼び出したidentityの既読位置を進める:
 
 ```bash
-git notes --ref=duet-bridge-local append -m "$(cat <<'EOF'
----
-sender: work_generalist
-branch: feat/example
-
-認証失敗ケースのテストを追加した。
-実装側で失敗を解消する必要がある。
-EOF
-)" <ANCHOR>
+elixir --sname NAME@localhost /path/to/.codex/skills/skill-duet-bridge/bridge_log.exs read
 ```
 
-追記に失敗した場合、`-f`で既存noteを上書きしない。
-発信内容を保持したままbridge sideへ失敗を報告し、必要なら代理記録を依頼する。
+指定sequenceより後の全eventを、既読位置を変えずに読む:
+
+```bash
+elixir --sname NAME@localhost /path/to/.codex/skills/skill-duet-bridge/bridge_log.exs read-after 0
+```
+
+eventを発信する。senderとbranchはCLIが補う:
+
+```bash
+elixir --sname NAME@localhost /path/to/.codex/skills/skill-duet-bridge/bridge_log.exs publish 'テストを追加し、現在GREENです。'
+```
+
+`read`では自分が発信したeventを表示しないが、そのsequenceまで既読位置を進める。
+再確認が必要な場合は`read-after`を使う。
 
 ## 更新を知らせる
 
@@ -89,33 +69,24 @@ bridge sideが応答を必要とする場合:
 ```text
 $skill-duet-bridge
 
-bridge logを更新しました。anchor: <ANCHOR>
-自分に関係する情報を確認し、必要な作業があれば作業開始前に報告してください。
+bridge logを更新しました。未読eventを確認し、自分に関係する情報があれば報告してください。
 ```
 
 この依頼は`post.exs`または、idleなplayerからまとめて応答を得る`post_all.exs`で送る。
+bridge logに情報があるだけでは、新しい作業の依頼や権限を意味しない。
 
 応答を待たない通知には`cast_all.exs`を使える。
-castでは応答がbridge sideへ返らないため、必要な結果はworktreeまたはbridge logへ残すよう明示する。
+castでは応答がbridge sideへ返らないため、結果が必要ならplayerにbridge logへの`publish`を依頼し、bridge sideが後から`read`する。
+publishはbridge sideを自動的にwake-upしない。
 
-## push前と終了時
+## resetと終了
 
-bridge logはremoteへpushしない。
-bridge sideとplayerは`--mirror`、`refs/*`、`refs/notes/*`を含むpushを行わない。
-
-push前に専用refがあることを確認し、push対象を通常branchへ明示的に限定する。
-
-```bash
-git for-each-ref --format='%(refname)' refs/notes/duet-bridge-local
-```
-
-bridge作業を終了するときは、必要な進捗、判断、検証が通常の成果物またはleadへの報告に残っていることを確認する。
-その後、専用ref全体を削除する。
+bridge作業が長く続き、フェーズが切り替わるときは、必要な進捗、判断、未解決事項を通常の成果物またはleadへの報告へ要約する。
+過去eventが不要になった場合に限り、bridge sideからlogをresetする。
 
 ```bash
-git update-ref -d refs/notes/duet-bridge-local
-git for-each-ref --format='%(refname)' refs/notes/duet-bridge-local
+elixir --sname NAME@localhost /path/to/.codex/skills/skill-duet-bridge/bridge_log.exs reset
 ```
 
-note単位の`git notes remove`だけではnotes refの履歴が残るため、終了時の掃除には使わない。
-ref削除後のbridge logは通常手順では取り出しにくくなるため、必要な情報の退避前に削除しない。
+playerはresetしない。
+Duetを終了または再起動した場合は自動的に内容が失われるため、終了前に必要な情報を通常の成果物へ残す。

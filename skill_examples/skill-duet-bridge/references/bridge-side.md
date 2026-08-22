@@ -38,7 +38,7 @@ $skill-duet-bridge
 ```
 
 項目を埋めること自体を目的にせず、既存文脈があれば差分だけを渡す。
-bridge logを使っている場合は、anchorと「読むだけか、必要な記録も行うか」を依頼に含める。
+bridge logを使っている場合は、「未読を読むか、必要な記録も行うか」を依頼に含める。
 
 同じ問いを複数playerへ送り、全応答を比較するときは`post_all.exs`を使える。
 busyなplayerには届かないため、全員の参加を前提にしない。
@@ -47,6 +47,7 @@ broadcastの先頭にも`$skill-duet-bridge`を書く。
 状態通知を各playerの次turnへ予約するときは`cast_all.exs`を使える。
 `cast_all.exs`は応答をbridge sideへ返さないため、返答が必要な依頼には使わない。
 非同期通知への結果が必要なら、worktreeまたはbridge logへ残すよう明示する。
+bridge logへpublishされた結果は自動通知されないため、bridge sideが後から未読を確認する。
 全playerに知らせる必要がない通知には使わない。
 
 ## 対話と統合
@@ -72,5 +73,5 @@ broadcastの先頭にも`$skill-duet-bridge`を書く。
 bridge logを使う場合は[bridge-log.md](bridge-log.md)を読む。
 直接会話を置き換えず、複数player間の補助文脈と非同期連絡に使う。
 
-pushまたはbridge作業の終了前に、bridge logのローカルrefを確認する。
-必要な情報を通常の成果物へ残したうえで、同referenceの終了手順に従って掃除する。
+bridge作業の終了前に、必要な情報を通常の成果物へ残す。
+長い作業のフェーズを区切る場合は、同referenceのreset手順を使える。

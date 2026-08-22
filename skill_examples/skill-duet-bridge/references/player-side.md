@@ -15,7 +15,7 @@ Use this reference only when `CODEX_DUET_ENTRY=1`.
 
 1. `CODEX_DUET_ENTRY_NAME`で自分のentry名を確認する。未設定なら推測せず、想定外の状態としてbridge sideへ報告する
 2. 目的、現状、範囲、求められる返答を把握する
-3. bridge logのanchorが渡された場合は、必要な範囲で読む
+3. bridge logの確認を依頼された場合は、未読eventを必要な範囲で読む
 4. 自分のroleとsandboxを守って調査または作業する
 5. `git diff`に現れない重要な進捗、判断、blocker、次に必要なことがあればbridge logへ残す
 6. 結果、変更箇所、検証、未解決、bridge sideに必要な判断を短く返す
@@ -39,10 +39,6 @@ bridge sideから「bridge log更新。自分に必要な作業があれば報�
 
 初めて読み書きするときは[bridge-log.md](bridge-log.md)を読む。
 
-発信する場合は、自由記述部分の形式にかかわらず次を必須にする。
-
-- `sender`: `CODEX_DUET_ENTRY_NAME`で示された自分のentry名
-- `branch`: 発信時に実際に作業しているbranch。detached HEADならその旨とcommitを記す
-
-sandboxなどによりnotes refへ書けない場合は失敗を隠さない。
-同じ必須項目を含む記録案を最終返答へ載せ、bridge sideに代理記録を依頼する。
+`bridge_log.exs`の`read`と`publish`はplayerから利用できる。
+発信時の`sender`は`CODEX_DUET_ENTRY_NAME`、`branch`は現在のGit状態からCLIが補う。
+publishに失敗した場合は失敗を隠さず、発信予定だった本文とエラーをbridge sideへ返す。
