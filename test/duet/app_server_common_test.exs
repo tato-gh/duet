@@ -43,11 +43,40 @@ defmodule Duet.AppServerCommonTest do
              AppServerCommon.build_non_interactive_answers(params, "no input")
   end
 
-  test "start_app_server/3 marks commands as started by duet" do
+  test "start_app_server/4 marks commands with the duet entry identity" do
     port =
-      AppServerCommon.start_app_server("printf '%s\\n' \"$CODEX_DUET_ENTRY\"", File.cwd!(), 1024)
+      AppServerCommon.start_app_server(
+        "printf '%s|%s\\n' \"$CODEX_DUET_ENTRY\" \"$CODEX_DUET_ENTRY_NAME\"",
+        File.cwd!(),
+        1024,
+        "research_player"
+      )
 
-    assert_receive {^port, {:data, {:eol, "1"}}}, 1_000
+    assert_receive {^port, {:data, {:eol, "1|research_player"}}}, 1_000
     assert_receive {^port, {:exit_status, 0}}, 1_000
+  end
+
+  test "inject_codex_shell_environment/2 configures turn shell variables" do
+    command =
+      AppServerCommon.inject_codex_shell_environment(
+        "codex app-server --stdio",
+        "work_generalist_'2"
+      )
+
+    assert OptionParser.split(command) == [
+             "codex",
+             "app-server",
+             "-c",
+             ~s(shell_environment_policy.set.CODEX_DUET_ENTRY="1"),
+             "-c",
+             ~s(shell_environment_policy.set.CODEX_DUET_ENTRY_NAME="work_generalist_'2"),
+             "--stdio"
+           ]
+  end
+
+  test "inject_codex_shell_environment/2 leaves custom app servers unchanged" do
+    command = "elixir custom_app_server.exs"
+
+    assert AppServerCommon.inject_codex_shell_environment(command, "custom") == command
   end
 end

@@ -39,8 +39,9 @@ elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/entries.exs
 
 entry はあなたと同じプロジェクトルートで動く。ファイル参照やファイル操作の可否は、その entry の `approval_policy`、`thread_sandbox`、`turn_sandbox_policy` に従う。
 
-duet から起動された entry のコマンドには `CODEX_DUET_ENTRY=1` が設定される。
-この skill の `post.exs`、`post_all.exs`、`cast_all.exs`、`overview.exs`、`overview_all.exs` は、この環境変数を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
+duet から起動された entry のコマンドには、`CODEX_DUET_ENTRY=1`と`CODEX_DUET_ENTRY_NAME=<entry名>`が設定される。
+通常の`codex app-server` commandでは、同じ値がCodexのturn用shell環境にも設定される。
+この skill の `post.exs`、`post_all.exs`、`cast_all.exs`、`overview.exs`、`overview_all.exs` は、`CODEX_DUET_ENTRY=1`を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
 hook や独自スクリプトでも duet 経由の実行を判定したい場合は、この環境変数を参照する。
 
 ## entry の選び方
@@ -52,33 +53,37 @@ hook や独自スクリプトでも duet 経由の実行を判定したい場合
 
 ## コマンド
 
+Codexから呼び出す場合は、project-localな`prefix_rule`で`elixir --sname`を判定できるよう、各操作を単純な単一コマンドにする。
+
+- concreteなcaller node名とskill scriptの絶対pathを直接指定する
+- prompt全体をshell-safeな単一引数として渡す。単一引用符を使う場合は、prompt内の`'`もshell-safeにescapeする
+- command substitution、backtick、heredoc、pipe、redirect、環境変数展開、globを使わない
+- `cd`と連結せず、作業directoryはcommand実行toolの`workdir`で指定する
+
 単一 entry へ送る:
 
 ```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post.exs ENTRY_NAME "PROMPT"
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post.exs ENTRY_NAME 'PROMPT'
 ```
 
 長文・複数行の場合:
 
 ```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post.exs ENTRY_NAME "$(cat <<'EOF'
-複数行のプロンプト
+elixir --sname NAME@localhost /absolute/path/to/skill-duet/post.exs ENTRY_NAME '複数行のプロンプト
 行2
-行3
-EOF
-)"
+行3'
 ```
 
 全 entry へ送り、全件の完了を待つ（作業中の entry は `busy` を返す）:
 
 ```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post_all.exs "/compact"
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post_all.exs '/compact'
 ```
 
 全 entry に後続の処理を予約し、モデルの処理完了を待たずに戻る:
 
 ```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/cast_all.exs "ブランチを fix/login に切り替えました。以後の作業対象はこのブランチです。"
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/cast_all.exs 'ブランチを fix/login に切り替えました。以後の作業対象はこのブランチです。'
 ```
 
 1 entry の role、現在も有効な経緯・文脈、未完了事項の有無を短く確認する（作業中の entry は `busy` を返す）:

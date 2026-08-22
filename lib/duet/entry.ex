@@ -39,7 +39,7 @@ defmodule Duet.Entry do
     reasoning_effort = Map.get(config, :reasoning_effort)
     service_tier = Map.get(config, :service_tier)
     cwd = Duet.Config.config_file_path() |> Path.dirname()
-    port = AppServerCommon.start_app_server(command, cwd, @port_line_bytes)
+    port = AppServerCommon.start_app_server(command, cwd, @port_line_bytes, name)
 
     state = %{
       name: name,

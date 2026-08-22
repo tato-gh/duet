@@ -36,6 +36,22 @@ ln -s ~/duet/skill_examples/skill-duet .claude/skills/skill-duet
 ln -s ~/duet/skill_examples/skill-duet-config .claude/skills/skill-duet-config
 ```
 
+#### Codexでapprovalを省略する（任意）
+
+CodexからDuetを利用すると、各操作でローカルErlang nodeへ接続するために`elixir --sname`を実行します。
+このコマンドを毎回承認したくない場合は、Duetを利用するプロジェクトに`.codex/rules/duet.rules`を作り、次を記述します。
+
+```starlark
+prefix_rule(
+    pattern = ["elixir", "--sname"],
+    decision = "allow",
+    justification = "Allow local Erlang node communication with Duet",
+)
+```
+
+このruleはDuet付属スクリプトに限らず、`elixir --sname`で始まるコマンド全般を許可します。
+信頼できるプロジェクトでのみ使用してください。
+
 ### 3. Duet を起動
 
 別ターミナルで起動します。
@@ -124,6 +140,10 @@ entry:
 | `approval_policy` | `"never"` | app-server に渡す approvalPolicy |
 | `thread_sandbox` | `"read-only"` | `thread/start` に渡す sandbox |
 | `turn_sandbox_policy` | `{"type":"readOnly","networkAccess":false}` | `turn/start` に渡す sandboxPolicy |
+
+Duetはentry processへ`CODEX_DUET_ENTRY=1`と`CODEX_DUET_ENTRY_NAME=<entry名>`を設定します。
+`codex app-server` commandにはCodexの`shell_environment_policy.set`も自動で追加し、turn内のshell commandへ同じ値を渡します。
+custom app-server commandを使う場合、tool実行環境までの伝播はそのcommand側で保証してください。
 
 `DUET.md` がない場合、Duet は entry なしのデフォルト設定で起動します。
 
