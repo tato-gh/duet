@@ -46,9 +46,13 @@ defmodule Duet.Entry do
       port: port,
       cwd: cwd,
       thread_id: nil,
+      turn_id: nil,
       status: :starting,
       rpc_id: 1,
       pending_method: nil,
+      interrupt_call: nil,
+      interrupt_request_id: nil,
+      interrupt_previous_status: nil,
       role: role,
       model: model,
       reasoning_effort: reasoning_effort,
@@ -81,6 +85,41 @@ defmodule Duet.Entry do
   @impl true
   def handle_call({:post, prompt}, from, state) do
     {:noreply, start_post(state, prompt, from)}
+  end
+
+  @impl true
+  def handle_call(:interrupt, _from, %{status: :idle} = state) do
+    {:reply, {:error, :not_running}, state}
+  end
+
+  @impl true
+  def handle_call(:interrupt, _from, %{turn_id: nil} = state) do
+    {:reply, {:error, :not_interruptible}, state}
+  end
+
+  @impl true
+  def handle_call(:interrupt, _from, %{status: :interrupting} = state) do
+    {:reply, {:error, :interrupting}, state}
+  end
+
+  @impl true
+  def handle_call(:interrupt, from, state) do
+    request_id = state.rpc_id
+
+    state =
+      AppServerCommon.send_rpc(state, "turn/interrupt", %{
+        threadId: state.thread_id,
+        turnId: state.turn_id
+      })
+
+    {:noreply,
+     %{
+       state
+       | status: :interrupting,
+         interrupt_call: from,
+         interrupt_request_id: request_id,
+         interrupt_previous_status: state.status
+     }}
   end
 
   @impl true
@@ -140,7 +179,7 @@ defmodule Duet.Entry do
 
   defp process_message(%{"error" => error} = msg, state) do
     Logger.error("[Duet.Entry:#{state.name}] RPC error for id=#{msg["id"]}: #{inspect(error)}")
-    handle_rpc_error(error, state)
+    handle_rpc_error(msg["id"], error, state)
   end
 
   defp process_message(%{"method" => method} = msg, state) do
@@ -167,7 +206,7 @@ defmodule Duet.Entry do
     thread_id = get_in(result, ["thread", "id"])
     Logger.info("[Duet.Entry:#{state.name}] /compact: new thread #{thread_id} established")
 
-    state_with_new_thread = %{state | thread_id: thread_id, first_turn: true}
+    state_with_new_thread = %{state | thread_id: thread_id, turn_id: nil, first_turn: true}
     input = build_turn_input(state_with_new_thread, build_compact_handoff_prompt(summary))
 
     state =
@@ -189,28 +228,72 @@ defmodule Duet.Entry do
 
   defp handle_response(_id, result, %{pending_method: :thread_start} = state) do
     thread_id = get_in(result, ["thread", "id"])
-    state = %{state | thread_id: thread_id, status: :idle, pending_method: nil, first_turn: true}
+
+    state = %{
+      state
+      | thread_id: thread_id,
+        turn_id: nil,
+        status: :idle,
+        pending_method: nil,
+        first_turn: true
+    }
+
     complete_post(state, {:ok, ""})
   end
 
-  defp handle_response(_id, _result, %{pending_method: :turn_start} = state) do
-    %{state | pending_method: nil}
+  defp handle_response(id, _result, %{interrupt_request_id: id} = state) do
+    reply_interrupt(state, :ok)
+  end
+
+  defp handle_response(_id, result, %{pending_method: :turn_start} = state) do
+    %{state | pending_method: nil, turn_id: get_in(result, ["turn", "id"])}
   end
 
   defp handle_response(_id, _result, state), do: state
 
-  defp handle_rpc_error(error, %{pending_method: :initialize}) do
+  defp reply_interrupt(%{interrupt_call: nil} = state, _result), do: state
+
+  defp reply_interrupt(state, :ok) do
+    GenServer.reply(state.interrupt_call, :ok)
+
+    %{
+      state
+      | interrupt_call: nil,
+        interrupt_request_id: nil,
+        interrupt_previous_status: nil
+    }
+  end
+
+  defp reply_interrupt(state, {:error, _reason} = result) do
+    GenServer.reply(state.interrupt_call, result)
+
+    %{
+      state
+      | status: state.interrupt_previous_status,
+        interrupt_call: nil,
+        interrupt_request_id: nil,
+        interrupt_previous_status: nil
+    }
+  end
+
+  defp handle_rpc_error(_id, error, %{pending_method: :initialize}) do
     raise "app-server initialize failed: #{inspect(error)}"
   end
 
-  defp handle_rpc_error(error, state) do
+  defp handle_rpc_error(id, error, %{interrupt_request_id: id} = state) do
+    Logger.error("[Duet.Entry:#{state.name}] turn/interrupt failed: #{inspect(error)}")
+    reply_interrupt(state, {:error, {:rpc_error, error}})
+  end
+
+  defp handle_rpc_error(_id, error, state) do
     state =
       %{
         state
         | status: :idle,
           pending_method: nil,
           pending_compact_summary: nil,
-          response_buf: ""
+          response_buf: "",
+          turn_id: nil
       }
 
     complete_post(state, {:error, {:rpc_error, error}})
@@ -223,7 +306,8 @@ defmodule Duet.Entry do
           "[Duet.Entry:#{state.name}] compact summary turn ended with status: #{status}"
         )
 
-        state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+        state = %{state | status: :idle, pending_method: nil, response_buf: "", turn_id: nil}
+        state = reply_interrupt(state, :ok)
         complete_post(state, {:error, status})
 
       _ ->
@@ -232,10 +316,12 @@ defmodule Duet.Entry do
         if summary == "" do
           Logger.error("[Duet.Entry:#{state.name}] /compact: summary was empty")
 
-          state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+          state = %{state | status: :idle, pending_method: nil, response_buf: "", turn_id: nil}
           complete_post(state, {:error, :empty_compact_summary})
         else
           Logger.info("[Duet.Entry:#{state.name}] /compact: summary captured")
+
+          state = %{state | turn_id: nil}
 
           state =
             AppServerCommon.send_rpc(state, "thread/start", thread_start_params(state))
@@ -256,7 +342,8 @@ defmodule Duet.Entry do
       status when status in ["failed", "interrupted"] ->
         Logger.error("[Duet.Entry:#{state.name}] turn ended with status: #{status}")
 
-        state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+        state = %{state | status: :idle, pending_method: nil, response_buf: "", turn_id: nil}
+        state = reply_interrupt(state, :ok)
         complete_post(state, {:error, status})
 
       _ ->
@@ -268,15 +355,25 @@ defmodule Duet.Entry do
             | status: :idle,
               pending_method: nil,
               response_buf: "",
+              turn_id: nil,
               first_turn: false
           }
 
+        state = reply_interrupt(state, :ok)
         complete_post(state, {:ok, response})
     end
   end
 
   defp handle_notification("item/agentMessage/delta", params, state) do
     %{state | response_buf: state.response_buf <> (params["delta"] || "")}
+  end
+
+  defp handle_notification("turn/started", params, state) do
+    if params["threadId"] == state.thread_id do
+      %{state | turn_id: get_in(params, ["turn", "id"])}
+    else
+      state
+    end
   end
 
   defp handle_notification("item/completed", _params, state), do: state
@@ -327,14 +424,16 @@ defmodule Duet.Entry do
   defp handle_notification("turn/failed", params, state) do
     Logger.error("[Duet.Entry:#{state.name}] turn/failed: #{inspect(params)}")
 
-    state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+    state = %{state | status: :idle, pending_method: nil, response_buf: "", turn_id: nil}
+    state = reply_interrupt(state, :ok)
     complete_post(state, {:error, :turn_failed})
   end
 
   defp handle_notification("turn/cancelled", params, state) do
     Logger.warning("[Duet.Entry:#{state.name}] turn/cancelled: #{inspect(params)}")
 
-    state = %{state | status: :idle, pending_method: nil, response_buf: ""}
+    state = %{state | status: :idle, pending_method: nil, response_buf: "", turn_id: nil}
+    state = reply_interrupt(state, :ok)
     complete_post(state, {:error, :turn_cancelled})
   end
 

@@ -2,6 +2,7 @@ log_path = System.fetch_env!("FAKE_APP_SERVER_LOG")
 summary = System.get_env("FAKE_COMPACT_SUMMARY", "引き継ぎ要約")
 handoff_response = System.get_env("FAKE_HANDOFF_RESPONSE", "引き継ぎを確認しました")
 turn_delay_ms = System.get_env("FAKE_TURN_DELAY_MS", "0") |> String.to_integer()
+wait_for_interrupt = System.get_env("FAKE_WAIT_FOR_INTERRUPT", "0") == "1"
 
 append_log = fn event ->
   File.write!(log_path, JSON.encode!(event) <> "\n", [:append])
@@ -11,7 +12,7 @@ send_message = fn message ->
   IO.puts(JSON.encode!(message))
 end
 
-loop = fn loop, thread_count ->
+loop = fn loop, thread_count, active_turn, wait_for_interrupt ->
   case IO.read(:stdio, :line) do
     :eof ->
       :ok
@@ -26,7 +27,7 @@ loop = fn loop, thread_count ->
       case message["method"] do
         "initialize" ->
           send_message.(%{id: message["id"], result: %{}})
-          loop.(loop, thread_count)
+          loop.(loop, thread_count, active_turn, wait_for_interrupt)
 
         "thread/start" ->
           next_thread_count = thread_count + 1
@@ -36,18 +37,18 @@ loop = fn loop, thread_count ->
             result: %{thread: %{id: "thread-#{next_thread_count}"}}
           })
 
-          loop.(loop, next_thread_count)
+          loop.(loop, next_thread_count, active_turn, wait_for_interrupt)
 
         "turn/start" ->
-          if turn_delay_ms > 0, do: Process.sleep(turn_delay_ms)
-
           text =
             message
             |> get_in(["params", "input"])
             |> List.first(%{})
             |> Map.get("text", "")
 
-          send_message.(%{id: message["id"], result: %{turn: %{id: "turn-#{message["id"]}"}}})
+          turn_id = "turn-#{message["id"]}"
+          thread_id = get_in(message, ["params", "threadId"])
+          send_message.(%{id: message["id"], result: %{turn: %{id: turn_id}}})
 
           response =
             if String.contains?(text, "引き継ぎメモを作成してください") do
@@ -56,14 +57,37 @@ loop = fn loop, thread_count ->
               handoff_response
             end
 
-          send_message.(%{method: "item/agentMessage/delta", params: %{delta: response}})
-          send_message.(%{method: "turn/completed", params: %{turn: %{status: "completed"}}})
-          loop.(loop, thread_count)
+          if wait_for_interrupt do
+            loop.(loop, thread_count, %{id: turn_id, thread_id: thread_id}, wait_for_interrupt)
+          else
+            if turn_delay_ms > 0, do: Process.sleep(turn_delay_ms)
+
+            send_message.(%{method: "item/agentMessage/delta", params: %{delta: response}})
+            send_message.(%{method: "turn/completed", params: %{threadId: thread_id, turn: %{id: turn_id, status: "completed"}}})
+            loop.(loop, thread_count, nil, wait_for_interrupt)
+          end
+
+        "turn/interrupt" ->
+          case active_turn do
+            %{id: turn_id, thread_id: thread_id} ->
+              send_message.(%{id: message["id"], result: %{}})
+
+              send_message.(%{
+                method: "turn/completed",
+                params: %{threadId: thread_id, turn: %{id: turn_id, status: "interrupted"}}
+              })
+
+              loop.(loop, thread_count, nil, false)
+
+            nil ->
+              send_message.(%{id: message["id"], error: %{message: "no active turn"}})
+              loop.(loop, thread_count, active_turn, wait_for_interrupt)
+          end
 
         _ ->
-          loop.(loop, thread_count)
+          loop.(loop, thread_count, active_turn, wait_for_interrupt)
       end
   end
 end
 
-loop.(loop, 0)
+loop.(loop, 0, nil, wait_for_interrupt)

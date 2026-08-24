@@ -1,6 +1,6 @@
 ---
 name: skill-duet
-description: 「duetを使って」「duetで～」「別視点で継続相談して」「同じ相手に続けて依頼して」など、起動中の duet entry (AI) を文脈が続く伴走相手として活用するときに使う。利用可能 entry を確認し、用途に応じて post、post_all、cast_all、overview から会話・通知・文脈の再確認をする。
+description: 「duetを使って」「duetで～」「別視点で継続相談して」「同じ相手に続けて依頼して」「duet entryを止めて」など、起動中の duet entry (AI) を文脈が続く伴走相手として活用するときに使う。利用可能 entry を確認し、用途に応じて post、post_all、cast_all、overview、interrupt から会話・通知・文脈の再確認・中断をする。
 ---
 
 # skill-duet
@@ -41,7 +41,7 @@ entry はあなたと同じプロジェクトルートで動く。ファイル�
 
 duet から起動された entry のコマンドには、`CODEX_DUET_ENTRY=1`と`CODEX_DUET_ENTRY_NAME=<entry名>`が設定される。
 通常の`codex app-server` commandでは、同じ値がCodexのturn用shell環境にも設定される。
-この skill の `post.exs`、`post_all.exs`、`cast_all.exs`、`overview.exs`、`overview_all.exs` は、`CODEX_DUET_ENTRY=1`を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
+この skill の `post.exs`、`post_all.exs`、`cast_all.exs`、`overview.exs`、`overview_all.exs`、`interrupt.exs` は、`CODEX_DUET_ENTRY=1`を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
 hook や独自スクリプトでも duet 経由の実行を判定したい場合は、この環境変数を参照する。
 
 ## entry の選び方
@@ -98,6 +98,12 @@ elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/overview.exs EN
 elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/overview_all.exs
 ```
 
+実行中の 1 entry の turn を中断する（予約済みの依頼は維持される）:
+
+```bash
+elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/interrupt.exs ENTRY_NAME
+```
+
 `post_all.exs` は `post.exs` の全 entry 版であり、作業中の entry には送信せず、結果として `{:error, :busy}` を返す。`cast_all.exs` は各 entry がメッセージの処理予約を受け付けたことを確認してから戻る。予約されたメッセージは同じ entry では到着順に処理され、entry 間では並行して進む。AI エージェントは、ブランチ変更のように回答を待たず後続の作業へ反映したい通知に `cast_all.exs` を使う。
 
 `overview.exs` と `overview_all.exs` は、entry 自身に role、現在も有効な経緯・文脈、未完了事項の有無を確認できる事実だけで最大3項目に説明させる。未完了事項が明確にある場合だけ、その状況と未解決点を含める。担当作業の確認に限らず、相談役や待機中の entry の再紹介にも使える。Duet の内部状態を直接照会するコマンドではないため、回答は entry が保持している文脈に基づく。オーケストレータだけを compact したあとなど、各 entry とのやりとりを再開する前に使う。
@@ -108,6 +114,7 @@ elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/overview_all.ex
 
 - `/clear`: entry の thread をリセットする
 - `/compact`: 現在の thread を要約し、新しい thread に引き継ぐ
+- `interrupt.exs ENTRY_NAME`: 実行中の turn を中断する。中断される `post` は `"interrupted"` を返し、予約済みの依頼は続けて実行される
 
 ## ユースケース別の使い方
 
@@ -184,5 +191,7 @@ elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/overview_all.ex
 |--------|------|------|
 | `:not_found` | entry 名が存在しない | `entries.exs` で利用可能な entry 名を再確認する |
 | `:busy` | entry が処理中 | 待ってリトライする |
+| `:not_running` | entry は実行中ではない | 中断は不要 |
+| `:not_interruptible` | turn ID の取得前など、まだ中断できない状態 | 少し待って再試行する |
 | `"failed"` / `"interrupted"` | LLM 側でエラー | リトライする |
 | `{:rpc_error, error}` | app-server が RPC error を返した | 内容を確認し、必要なら entry やプロンプトを変えてリトライする |

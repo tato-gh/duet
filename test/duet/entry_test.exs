@@ -116,6 +116,47 @@ defmodule Duet.EntryTest do
     refute Enum.any?(turn_inputs, &String.contains?(&1, "busy prompt"))
   end
 
+  test "interrupt stops the active turn and continues with queued prompts", %{tmp_dir: tmp_dir} do
+    log_path = Path.join(tmp_dir, "interrupt.log")
+    File.write!(log_path, "")
+
+    start_entry!(
+      name: "interruptible",
+      command: fake_app_server_command(log_path, wait_for_interrupt: true)
+    )
+
+    active_post = Task.async(fn -> Duet.post("interruptible", "active prompt") end)
+    wait_until_status("interruptible", :waiting)
+
+    assert {:ok, ["interruptible"]} = Duet.cast_all("queued prompt")
+    assert :ok = Duet.interrupt("interruptible")
+    assert {:error, "interrupted"} = Task.await(active_post)
+    wait_until_idle("interruptible")
+
+    received = read_received_messages(log_path)
+    interrupt = Enum.find(received, &(Map.get(&1, "method") == "turn/interrupt"))
+
+    assert get_in(interrupt, ["params", "threadId"]) == "thread-1"
+    assert get_in(interrupt, ["params", "turnId"]) =~ ~r/^turn-\d+$/
+
+    turn_inputs =
+      received
+      |> Enum.filter(&(Map.get(&1, "method") == "turn/start"))
+      |> Enum.map(&input_text/1)
+
+    assert Enum.any?(turn_inputs, &String.contains?(&1, "active prompt"))
+    assert Enum.any?(turn_inputs, &String.contains?(&1, "queued prompt"))
+  end
+
+  test "interrupt returns not_running for an idle entry", %{tmp_dir: tmp_dir} do
+    log_path = Path.join(tmp_dir, "idle.log")
+    File.write!(log_path, "")
+
+    start_entry!(name: "idle", command: fake_app_server_command(log_path))
+
+    assert {:error, :not_running} = Duet.interrupt("idle")
+  end
+
   test "post_all waits for every running entry", %{tmp_dir: tmp_dir} do
     alpha_log_path = Path.join(tmp_dir, "alpha.log")
     beta_log_path = Path.join(tmp_dir, "beta.log")
@@ -223,11 +264,13 @@ defmodule Duet.EntryTest do
     script_path = Path.expand("../support/fake_app_server.script", __DIR__)
     summary = Keyword.get(opts, :summary, "引き継ぎ要約")
     turn_delay_ms = Keyword.get(opts, :turn_delay_ms, 0)
+    wait_for_interrupt = Keyword.get(opts, :wait_for_interrupt, false)
 
     [
       "FAKE_APP_SERVER_LOG=#{shell_escape(log_path)}",
       "FAKE_COMPACT_SUMMARY=#{shell_escape(summary)}",
       "FAKE_TURN_DELAY_MS=#{turn_delay_ms}",
+      "FAKE_WAIT_FOR_INTERRUPT=#{if(wait_for_interrupt, do: 1, else: 0)}",
       "elixir #{shell_escape(script_path)}"
     ]
     |> Enum.join(" ")

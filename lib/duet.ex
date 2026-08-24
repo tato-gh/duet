@@ -57,6 +57,21 @@ defmodule Duet do
   end
 
   @doc """
+  Interrupts the currently running turn of a named entry.
+
+  Returns `:ok` once the app-server accepts the interruption request. The interrupted
+  `post/2` call then returns `{:error, "interrupted"}`. Reserved prompts remain queued.
+  """
+  def interrupt(entry_name) when is_binary(entry_name) do
+    name = entry_name(entry_name)
+
+    case GenServer.whereis(name) do
+      nil -> {:error, :not_found}
+      _pid -> GenServer.call(name, :interrupt, 5_000)
+    end
+  end
+
+  @doc """
   Asks a named entry for a concise self-description of its role and current context.
 
   This is a regular `post/2`, so a busy entry returns `{:error, :busy}`.

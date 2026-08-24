@@ -153,6 +153,7 @@ Duet は `DUET.md` と `DUET_TIMEOUT_MINUTES` を起動時にだけ読みます�
 
 - `/clear`: 選択した entry の thread を新しくする
 - `/compact`: 現在の thread を要約し、新しい thread に引き継ぐ
+- `interrupt.exs ENTRY_NAME`: 実行中の turn だけを中断する。予約済みの依頼は維持する。
 
 ## API
 
@@ -164,7 +165,9 @@ Node.connect(:duet@localhost)
 
 :erpc.call(:duet@localhost, Duet, :entries, [], 5_000)
 :erpc.call(:duet@localhost, Duet, :post, ["work_partner", "相談したい内容"], :infinity)
+:erpc.call(:duet@localhost, Duet, :interrupt, ["work_partner"], 5_000)
 ```
 
 - `Duet.entries/0` returns running entries as `%{name: name, role: role}`.
 - `Duet.post/2` returns `{:ok, response}` or `{:error, reason}`.
+- `Duet.interrupt/1` returns `:ok` when the app-server accepts an interruption request. The active `post/2` then returns `{:error, "interrupted"}`; queued prompts continue normally.
