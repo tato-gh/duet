@@ -5,68 +5,60 @@ description: 「duetを使って」「duetで～」「別視点で継続相談�
 
 # skill-duet
 
-起動中の duet entry へプロンプトを送信し、応答を受け取る。
-各 entry は独立したスレッド文脈を持つため、同じ entry に連続送信すると会話を継続できる。
+起動中のduet entryへ依頼し、同じ相手と文脈を保って会話・作業を続ける。
+途中経過、迷い、仮説、雑談をそのまま渡してよい。相手の返答を材料にし、最終判断と統合は呼び出し側で行う。
 
-duet は「相談先」だけではなく、会話や作業に参加するパートナーとして使う。
-考えがまとまっていない段階でも、途中経過、迷い、仮説、雑談をそのまま渡してよい。
-相手が絶対でも、自分が絶対でもない。反応を材料にして、最終判断と統合はローカル側で行う。
+依頼の組み立て方や相談の進め方に迷ったときだけ、[使い方と依頼例](references/usage.md)を読む。操作が決まっていれば、この本文だけで進められる。
 
-## 使うタイミング
+## entryを確認・選択する
 
-- ユーザーが「duetを使って」「duetで」などと明示したとき
-- 気軽な会話や遊びを、同じ相手と続けたいとき
-- 作業や思考の途中に entry を巻き込みたいとき
-- 一部の整理、下調べ、反証、レビューを任せたいとき
-- 自分の思い込みや見落としを減らしたいとき
-- 複数 entry の別視点を比較したいとき
+entry名が不明なとき、会話の初回、または`:not_found`が返ったときは`entries.exs`で利用可能なentryとroleを確認する。同じ相手との継続中は毎回確認しなくてよい。
 
-## duet で得られること
+- 用途に合うentryを名前とroleから選ぶ
+- 同じ話題は同じentryへ、前回からの差分を渡す
+- 無関係な話題へ移る場合は`/clear`するか、別entryを使う
+- 長い会話を要約して引き継ぐ場合は`/compact`を送る
+- 保持文脈が不明なentryと会話を再開する場合は`overview`で確認する
 
-- 継続性: 同じ entry と会話を続けられるため、前提説明を減らせる
-- 別視点: 別 role の相手に見てもらうことで、思い込みや見落としを減らせる
-- 役割分担: 雑談、伴走、レビュー、判定などを entry ごとに分けられる
-- 文脈分離: 話題ごとに entry を分けて、不要な文脈混入を避けられる
+entryは`DUET.md`のあるプロジェクトディレクトリで動く。ファイル操作の可否はentryの`approval_policy`、`thread_sandbox`、`turn_sandbox_policy`に従う。
 
-## 最初に確認すること
+PJ内の情報はパスや対象diffを示して読ませ、本文を転載しない。会話で決まった未記録の制約や、前回からの変更だけ補う。
+返答の扱いは依頼に合わせる。発想や反証は候補として、レビュー指摘は該当コードと根拠を確認して扱う。実装の完了は報告だけでなく差分と検証結果で確認する。判定では伴走中の同意や口調に引きずられず、目的・制約・根拠に照らして採否を決める。
 
-entry 名が不明なとき、会話の初回、または `:not_found` が返ったときは `entries.exs` で利用可能 entry を確認する。
-すでに使う entry が明確で、同じ文脈を継続する場合は毎回確認しなくてよい。
+`CODEX_DUET_ENTRY=1`はDuetから起動されたentryを示し、`CODEX_DUET_ENTRY_NAME`にentry名が入る。通常の`codex app-server`ではturnのshellにも伝播する。`entries.exs`以外の操作スクリプトは、再帰呼び出しを防ぐため`CODEX_DUET_ENTRY=1`なら終了する。迂回して呼び出さない。
 
-```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/entries.exs
-```
+## コマンドの実行
 
-entry はあなたと同じプロジェクトルートで動く。ファイル参照やファイル操作の可否は、その entry の `approval_policy`、`thread_sandbox`、`turn_sandbox_policy` に従う。
+各スクリプトは同じディレクトリの`client.exs`を読むため、配置・コピーはskillディレクトリ単位で行う。
+接続先は作業ディレクトリの`DUET.md`から読む。`node_name`はトップレベルの1行に英数字・`_`・`.`・`@`・`-`で書き、単一・二重引用符と行末コメントに対応する。省略時は`duet@<hostname>`を使う。
 
-duet から起動された entry のコマンドには、`CODEX_DUET_ENTRY=1`と`CODEX_DUET_ENTRY_NAME=<entry名>`が設定される。
-通常の`codex app-server` commandでは、同じ値がCodexのturn用shell環境にも設定される。
-この skill の `post.exs`、`post_all.exs`、`cast_all.exs`、`overview.exs`、`overview_all.exs`、`interrupt.exs` は、`CODEX_DUET_ENTRY=1`を検出すると終了する。entry から Duet を再帰的に呼び出して、会話や作業が入れ子になることを防ぐためである。
-hook や独自スクリプトでも duet 経由の実行を判定したい場合は、この環境変数を参照する。
+Codexのproject-localな`prefix_rule`で判定できるよう、各操作を単純な単一コマンドにする。
 
-## entry の選び方
-
-- 既存文脈を引き継ぐなら同じ entry を再利用する
-- 用件が変わる場合は、送信前に `/clear` を使うか、別 entry へ切り替える
-- role が複数見える場合は、entry 名と role から用途に合う相手を選ぶ
-- 話題の区切りで長期文脈を保ちたい場合は `/compact` で要約して継続する
-
-## コマンド
-
-Codexから呼び出す場合は、project-localな`prefix_rule`で`elixir --sname`を判定できるよう、各操作を単純な単一コマンドにする。
-
-- concreteなcaller node名とskill scriptの絶対pathを直接指定する
-- prompt全体をshell-safeな単一引数として渡す。単一引用符を使う場合は、prompt内の`'`もshell-safeにescapeする
+- 下の`NAME`は呼び出しごとに衝突しない具体的なcaller node名へ、スクリプトのpathは配置先の絶対pathへ置き換える
+- prompt全体をshell-safeな単一引数として渡す。prompt内の単一引用符もescapeする
 - command substitution、backtick、heredoc、pipe、redirect、環境変数展開、globを使わない
-- `cd`と連結せず、作業directoryはcommand実行toolの`workdir`で指定する
+- `cd`と連結せず、実行toolの`workdir`に対象プロジェクトディレクトリを指定する
 
-単一 entry へ送る:
+基本形:
 
 ```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post.exs ENTRY_NAME 'PROMPT'
+elixir --sname NAME@localhost /absolute/path/to/skill-duet/entries.exs
+elixir --sname NAME@localhost /absolute/path/to/skill-duet/post.exs ENTRY_NAME 'PROMPT'
 ```
 
-長文・複数行の場合:
+以下も同じ`elixir --sname NAME@localhost`に、スクリプトの絶対pathと引数を続けて、1操作ずつ実行する。
+
+| スクリプトと引数 | 用途と完了の意味 |
+| --- | --- |
+| `entries.exs` | 起動中entryの名前とroleを一覧する |
+| `post.exs ENTRY_NAME 'PROMPT'` | 1 entryの応答を待つ。処理中なら`busy` |
+| `post_all.exs 'PROMPT'` | 全entryへ送り、応答を待つ。処理中のentryには送らず、個別に`busy`を返す |
+| `cast_all.exs 'PROMPT'` | 全entryへの処理予約を確認して戻る。モデルの完了は待たず、応答は取得できない |
+| `overview.exs ENTRY_NAME` | 1 entryに保持文脈を説明させる。処理中なら`busy` |
+| `overview_all.exs` | 全entryのoverviewを取得する。処理中のentryは`busy` |
+| `interrupt.exs ENTRY_NAME` | 実行中turnの中断を要求する。予約済みの依頼は維持する |
+
+複数行のpromptも、単一引数のまま渡す:
 
 ```bash
 elixir --sname NAME@localhost /absolute/path/to/skill-duet/post.exs ENTRY_NAME '複数行のプロンプト
@@ -74,124 +66,31 @@ elixir --sname NAME@localhost /absolute/path/to/skill-duet/post.exs ENTRY_NAME '
 行3'
 ```
 
-全 entry へ送り、全件の完了を待つ（作業中の entry は `busy` を返す）:
+`cast_all`はブランチ変更など、回答を待たず次の処理へ反映させる通知に使う。予約は同じentry内で到着順に処理され、entry間では並行して進む。返答が必要な依頼には`post`または`post_all`を使う。
 
-```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/post_all.exs '/compact'
-```
+`overview`はentry自身がrole、現在も有効な経緯・文脈、明確な未完了事項を最大3項目で説明する。Duetの内部状態を直接照会する機能ではなく、回答はentryの保持文脈に基づく。
 
-全 entry に後続の処理を予約し、モデルの処理完了を待たずに戻る:
+## 文脈の切り替えと中断
 
-```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/cast_all.exs 'ブランチを fix/login に切り替えました。以後の作業対象はこのブランチです。'
-```
+`/clear`と`/compact`は`post`のpromptとして送る。全entryが対象なら`post_all`を使い、`busy`で未送信のentryを確認する。
 
-1 entry の role、現在も有効な経緯・文脈、未完了事項の有無を短く確認する（作業中の entry は `busy` を返す）:
+| 操作 | 結果 |
+| --- | --- |
+| `/clear` | 新しいthreadへ切り替える |
+| `/compact` | 現在の会話の要約を作り、新しいthreadへ引き継ぐ |
+| `interrupt.exs ENTRY_NAME` | 実行中turnを中断する。中断された`post`は`"interrupted"`を返し、予約済みの依頼は続けて実行される |
 
-```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/overview.exs ENTRY_NAME
-```
+## 待機とエラー
 
-全 entry の overview を確認する（作業中の entry は `busy` を返す）:
+`post`・`post_all`・`overview`・`overview_all`の応答待機時間は、Duet起動時の`DUET_TIMEOUT_MINUTES`で設定する。既定は20分で、変更には再起動が必要。
 
-```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/overview_all.exs
-```
+待機のタイムアウトは作業の中断ではない。entryのturnと予約は継続するため、同じ依頼を自動で再送しない。停止が必要なら`interrupt`を使い、再送前に変更ファイルや実行結果を確認する。単一entryの呼び出しでは、タイムアウトは通常のエラー応答ではなくRPC呼び出しの失敗として現れる。
 
-実行中の 1 entry の turn を中断する（予約済みの依頼は維持される）:
-
-```bash
-elixir --sname NAME@localhost /path/to/.claude/skills/skill-duet/interrupt.exs ENTRY_NAME
-```
-
-`post_all.exs` は `post.exs` の全 entry 版であり、作業中の entry には送信せず、結果として `{:error, :busy}` を返す。`cast_all.exs` は各 entry がメッセージの処理予約を受け付けたことを確認してから戻る。予約されたメッセージは同じ entry では到着順に処理され、entry 間では並行して進む。AI エージェントは、ブランチ変更のように回答を待たず後続の作業へ反映したい通知に `cast_all.exs` を使う。
-
-`overview.exs` と `overview_all.exs` は、entry 自身に role、現在も有効な経緯・文脈、未完了事項の有無を確認できる事実だけで最大3項目に説明させる。未完了事項が明確にある場合だけ、その状況と未解決点を含める。担当作業の確認に限らず、相談役や待機中の entry の再紹介にも使える。Duet の内部状態を直接照会するコマンドではないため、回答は entry が保持している文脈に基づく。オーケストレータだけを compact したあとなど、各 entry とのやりとりを再開する前に使う。
-
-`post.exs`、`post_all.exs`、`overview.exs`、`overview_all.exs` の応答待機時間は、Duet 起動時の `DUET_TIMEOUT_MINUTES` で設定できる。未指定時は20分で、作業量に合わせて起動前に変更する。
-
-## 操作
-
-- `/clear`: entry の thread をリセットする
-- `/compact`: 現在の thread を要約し、新しい thread に引き継ぐ
-- `interrupt.exs ENTRY_NAME`: 実行中の turn を中断する。中断される `post` は `"interrupted"` を返し、予約済みの依頼は続けて実行される
-
-## ユースケース別の使い方
-
-カジュアル会話・継続対話:
-雑談、しりとり、発想の壁打ちなど。自然文でよい。完了条件や制約を無理に作らなくてよい。同じ entry を使い続けると会話が安定しやすい。
-
-同席・並走:
-作業や思考の場に entry を参加させる。完成した相談文を作る必要はない。途中の考え、作業ログ、迷い、違和感を渡し、相手の反応を見ながら進める。
-
-一部を任せる:
-整理、下調べ、反証、レビュー、要約などを entry に任せる。レビューでは確認する観点は相手に任せる。変更結果や判断はローカル側で確認する。
-
-思い込みの防止:
-自分の仮説、前提、採用しようとしている案を渡し、見落とし、反例、過剰確信を探してもらう。反論をもらうことが目的なので、正解扱いせず材料として使う。
-
-判定:
-複数案から選ぶ。論点、各案、根拠、制約、残る懸念を短く渡す。伴走時の空気感は持ち込まず、判断材料を明示する。
-
-複数視点の比較:
-複数 entry に個別に同じ論点を渡し、違いを見る。回答後にローカル側で統合する。
-
-全体への状態共有:
-全entryを要約してから続ける場合は `post_all.exs "/compact"` を使う。ブランチ変更など、全entryに後続の文脈として伝えればよい事項は `cast_all.exs` を使う。オーケストレータだけを compact したあとに各entryとのやりとりを再開する場合は `overview_all.exs` を使う。
-
-## プロンプトの温度感
-
-- カジュアル会話では自然文でよい
-- 作業を進めるときは、目的、現状、迷っている点を短く渡す
-- レビューを任せるときは、確認する観点は相手に任せる
-- 判定してもらうときは、論点、案、根拠、制約、懸念を渡す
-- 同じ entry へ続けるときは、前回からの差分だけ渡す
-- 必要なら確信度を `1-5` で添える。これは上下関係や採点ではなく、仮説の粗さや判断の強さを共有するために使う
-- プロンプトと返信だけでコードを転記する運用は避ける
-
-## 依頼の例
-
-カジュアル:
-
-```text
-しりとりしよう。まずはあなたから始めて。
-```
-
-同席・並走:
-
-```text
-いま README の移行文を書いている。
-少し硬くなりすぎている気がするので、読者が試しやすい流れになっているか一緒に見て。
-まだ途中なので、違和感ベースで返してほしい。
-```
-
-思い込みの防止:
-
-```text
-仮説: この設定ファイルは DUET.md のままでよいと思っている。
-理由: role や運用メモも書けるから。
-疑ってほしい観点: 単なる YAML として扱う方が自然ではないか、移行コストに見合うか。
-```
-
-判定:
-
-```text
-論点: キャッシュ戦略を A/B どちらにするか
-案A: 実装が単純、運用負荷が低い
-案B: 性能は高いが複雑
-根拠: 現在の運用体制は夜間対応1名
-制約: 切り戻し手順が5分以内であること
-残る懸念: 障害時の切り戻し
-論理整合性で最終判断してほしい
-```
-
-## エラー
-
-| reason | 意味 | 対処 |
-|--------|------|------|
-| `:not_found` | entry 名が存在しない | `entries.exs` で利用可能な entry 名を再確認する |
-| `:busy` | entry が処理中 | 待ってリトライする |
-| `:not_running` | entry は実行中ではない | 中断は不要 |
-| `:not_interruptible` | turn ID の取得前など、まだ中断できない状態 | 少し待って再試行する |
-| `"failed"` / `"interrupted"` | LLM 側でエラー | リトライする |
-| `{:rpc_error, error}` | app-server が RPC error を返した | 内容を確認し、必要なら entry やプロンプトを変えてリトライする |
+| reason | 意味・対処 |
+| --- | --- |
+| `:not_found` | entry名が存在しない。`entries.exs`で再確認する |
+| `:busy` | entryが処理中。完了後に必要な依頼を再送する |
+| `:not_running` | 実行中turnがなく、中断は不要 |
+| `:not_interruptible` | turn ID取得前など。中断が必要なら少し待って再試行する |
+| `"failed"` / `"interrupted"` | turnが失敗または中断された。途中の変更と継続の必要性を確認してから再依頼する |
+| `{:rpc_error, error}` | app-serverのRPC error。内容を確認し、必要ならentryや依頼を見直す |

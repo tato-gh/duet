@@ -10,6 +10,7 @@ description: 「duet release orchestraで進めて」「release orchestra」「d
 
 orchestra の役割境界を保ちつつ、プロジェクト管理を release / ticket 型にする。
 release 未満の小修正は `quickfix/` の ticket として扱える。
+操作には`skill-duet`を使う。
 
 ## 絶対境界
 
@@ -257,15 +258,15 @@ role には以下を必ず含める。
 
 1. `state.md` の `release_focus` と active kanban を確認する
 2. `Current` ticket を1つ選ぶ。なければ `Todo` の先頭候補を確認する。候補が `omission review ticket` の場合は `Current` へ移す前に「理想動作と omission review ticket」の強制停止を行う。それ以外は `Current` に移すよう scribe に依頼する
-3. worker への最初の依頼の直前に `/clear` または `/compact` を送る。その上で worker に ticket path と目的だけを渡す。詳細説明は繰り返さず、ticket を読ませる
+3. 「compact / clear」に従ってworkerの文脈を切り替え、ticket pathと目的を渡す。詳細はticketを読ませる
 4. worker の報告を受け、必要なら追加作業を worker に依頼する
 5. オーケストレータは worker 報告、変更ファイル一覧、`git status --short`、ticket の Scope / Done Criteria の整合性を見る。実装内容の詳細レビューは reviewer に委譲する
-6. reviewer への最初の依頼の直前に `/clear` または `/compact` を送る。その上で ticket path、最新 diff、worker 報告を見せてレビューさせる。ticket 範囲を超える指摘は current ticket の blocker や追加作業にせず、`omission review ticket` の候補として返させる
-7. reviewer の重大指摘、未完了判定、追加作業要求があれば、その指摘を要約しすぎず worker に戻す
-8. worker の再対応後は、必要に応じて reviewer に再レビューさせる。同一 ticket 内なので原則 `/clear` も `/compact` も送らない
-9. orchestrator が Done Criteria と Verification を満たしたと判断したら、scribe に ticket と kanban の更新を依頼する。scribe は独立に同条件を確認し、満たしていなければ Done に移さず差し戻す
+6. 「compact / clear」に従ってreviewerの文脈を切り替え、ticket path、最新diff、worker報告を見せてレビューさせる。ticket範囲を超える指摘は「理想動作と omission review ticket」に従って候補として返させる
+7. reviewerの重大指摘、未完了判定、追加作業要求があれば、「短い依頼を保つ」に従ってworkerへ戻す
+8. workerの再対応後は、必要に応じてreviewerに再レビューさせる
+9. 「完了判定」に従ってscribeへticketとkanbanの更新を依頼する
 10. release の Exit Criteria が満たされた場合は、scribe に `releases.md` の Summary / Result / Decisions / Not Needed / Carry Over と、必要なら `state.md` の次 `release_focus` 更新を依頼する
-11. 長い継続 ticket では節目ごとに scribe に Handoff 更新を依頼し、その後 worker に `/compact` を送る
+11. 長い継続ticketの文脈管理は「compact / clear」に従う
 
 ## Quickfix 実行ループ
 
@@ -274,9 +275,9 @@ role には以下を必ず含める。
 1. `docs/project_management/quickfix/README.md` と `quickfix/` 直下の ticket を読む
 2. ユーザー指定 ticket があればそれを選ぶ。指定がなければ直下 ticket をファイル名順で1つ選ぶ
 3. ticket が quickfix の大きさを超えていれば着手せず、incubator / roadmap / release への移動を提案する
-4. worker への最初の依頼の直前に `/clear` または `/compact` を送る。その上で quickfix ticket path だけを渡す
-5. reviewer に最新 diff と Done Criteria を見せて、範囲外変更、未完了、検証不足を確認させる
-6. Done Criteria と Verification を満たしたら、scribe に ticket の更新と `quickfix/done/` への移動を依頼する
+4. 「compact / clear」に従ってworkerの文脈を切り替え、quickfix ticket pathを渡す
+5. 同じ文脈規則をreviewerにも適用し、最新diffとDone Criteriaを見せて範囲外変更、未完了、検証不足を確認させる
+6. 「完了判定」に従ってscribeへticketの更新と`quickfix/done/`への移動を依頼する
 7. quickfix では `state.md`、release kanban、`releases.md` を更新しない。ただし、quickfix では扱えないと判明した事実を incubator / roadmap に残す必要がある場合は scribe に依頼する
 
 ## 短い依頼を保つ
@@ -285,7 +286,7 @@ role には以下を必ず含める。
 詳細はファイルに置く。
 
 entry は ticket を直接読むため、依頼文に Goal / Scope / Done Criteria を再掲しない。
-worker に追加作業を戻すときは、reviewer 指摘の原文を引用する形で渡し、要約はしない。
+workerへ追加作業を戻すときは、対応対象のreviewer指摘を原文で引用し、ticket pathと守るべきScopeを添える。条件や留保を落とさないため、指摘を要約で置き換えない。補足する場合は原文と区別する。
 
 worker への例:
 
@@ -325,7 +326,7 @@ release kanban、state、releases は更新しないでください。
 entry の role ではなく、指揮者側の手順として扱う。
 
 - worker / reviewer に対しては、ticket の最初の依頼の直前に `/clear` または `/compact` を送る。会話セッションに直前依頼の内容が残っており、それが次の作業/判断に効くと見える場合のみ `/compact`、それ以外は `/clear`
-- 同一 ticket 内の再依頼の前には送らない
+- 同一ticket内の再依頼では文脈を維持する。長期化した場合のみ次項のHandoff後にcompactする
 - 同じ ticket が長く続く場合、scribe に Handoff 更新を依頼した後、worker に `/compact` を送る
 - scribe は project_management の記録役なので、release 内は必要に応じて `/compact` を送る。release 切替時は `/clear` を送る
 - `/compact` 前に、消えると困る内容が ticket の `Handoff`、`Decisions`、`Verification` に残っているか確認する

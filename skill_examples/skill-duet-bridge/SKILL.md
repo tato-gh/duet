@@ -12,7 +12,8 @@ description: 「duet bridgeで進めて」「bridge sideとして進めて」「
 - `bridge side`: leadとpartnerを合わせた意思決定側
 - `player`: duet entry。独立した文脈と能力・権限を持ち、依頼されたときに参加する
 
-既存のorchestraのように、先にworker / reviewer / scribeの固定工程を組まない。
+操作には`skill-duet`を使う。
+参加するplayerと作業順序は、その時点の目的に合わせて決める。
 `DUET.md`はプロジェクト専用チームの手順書ではなく、利用可能なplayerのrosterと能力・権限の輪郭として扱う。
 起動済みでも使わないplayer、長時間待機するplayerがいてよい。
 

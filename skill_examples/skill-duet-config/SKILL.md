@@ -55,7 +55,7 @@ Codex CLI のバージョン差分が疑わしい場合は `codex app-server --h
 
 | 項目 | 意味 | 設定値・編集方針 |
 | --- | --- | --- |
-| `node_name` | Duet の Erlang node 名 | 通常は `"duet"` または `duet@<hostname>`。変更すると接続先名に影響するため確認する |
+| `node_name` | Duet の Erlang node 名 | 省略時は`duet@<hostname>`。付属スクリプトを使う場合はトップレベルの1行に英数字・`_`・`.`・`@`・`-`で書く。単一・二重引用符と行末コメントに対応。変更すると接続先名に影響するため確認する |
 | `entries` | 起動する entry の一覧 | entry 追加は用途が明確なら行ってよい。削除、名称変更、統合は確認する |
 | `entries[].name` | entry の識別名 | 必須。skill や RPC 呼び出しで使うため、既存名の変更は確認する |
 | `entries[].command` | app-server 起動コマンド | 通常は `"codex app-server"`。`--listen`、`--config`、`--enable` などを足す場合は影響範囲を確認する |
@@ -77,10 +77,12 @@ Codex CLI のバージョン差分が疑わしい場合は `codex app-server --h
 - 作業伴走 entry は `workspace-write` / `workspaceWrite` を使える。共有設定では `writableRoots` を省き、role と運用メモで意図する書き込み範囲を明示する
 - `danger-full-access` / `dangerFullAccess` は強い権限なので、ユーザーが明示した場合以外は提案に留める
 - `approval_policy: "never"` は非対話運用に向くが、危険な操作も承認できない。権限を広げる場合は sandbox 側で制限する
-- `approval_policy: "on-request"` はAIエージェントが必要時に承認を求める運用に向く
+- Duetには承認要求をユーザーへ転送する経路がなく、受信した要求は拒否する。`approval_policy: "on-request"`にしても人間が承認できる運用にはならない
 - `approval_policy: "on-failure"` は失敗時だけ承認を求める挙動だが、Codex CLI では deprecated と表示される場合があるため、新規採用は慎重にする
 - `approval_policy: "untrusted"` は信頼済みでない操作の承認を求める用途に使う
 - Codex app-server は experimental なため、未知の値や新しい permission profile を `DUET.md` に入れる前に、現在の Codex CLI で使える値か確認する
+
+Duetはユーザー入力要求にも非対話セッションである旨を返す。対話的な承認・入力が必要な作業は、entryから呼び出し側へ不足を報告させる。
 
 ## 編集手順
 

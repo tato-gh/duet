@@ -126,7 +126,7 @@ defmodule Duet.EntryTest do
     )
 
     active_post = Task.async(fn -> Duet.post("interruptible", "active prompt") end)
-    wait_until_status("interruptible", :waiting)
+    wait_until_interruptible("interruptible")
 
     assert {:ok, ["interruptible"]} = Duet.cast_all("queued prompt")
     assert :ok = Duet.interrupt("interruptible")
@@ -245,6 +245,21 @@ defmodule Duet.EntryTest do
 
   defp wait_until_idle(name) do
     wait_until_status(name, :idle)
+  end
+
+  defp wait_until_interruptible(name, attempts \\ 100)
+
+  defp wait_until_interruptible(name, 0), do: flunk("#{name} did not receive a turn ID")
+
+  defp wait_until_interruptible(name, attempts) do
+    state = :sys.get_state({:via, Registry, {Duet.EntryRegistry, name}})
+
+    if state.status == :waiting and is_binary(state.turn_id) do
+      :ok
+    else
+      Process.sleep(10)
+      wait_until_interruptible(name, attempts - 1)
+    end
   end
 
   defp wait_until_status(name, expected_status) do

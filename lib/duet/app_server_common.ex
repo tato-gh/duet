@@ -10,11 +10,11 @@ defmodule Duet.AppServerCommon do
   def decode_and_process(line, state, process_fun, log_prefix) when is_function(process_fun, 2) do
     normalized = normalize_utf8(line)
 
-    try do
-      msg = JSON.decode!(normalized)
-      process_fun.(msg, state)
-    rescue
-      _ ->
+    case JSON.decode(normalized) do
+      {:ok, msg} ->
+        process_fun.(msg, state)
+
+      {:error, _reason} ->
         log_non_json(log_prefix, normalized)
         state
     end

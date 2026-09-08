@@ -3,6 +3,27 @@ defmodule Duet.AppServerCommonTest do
 
   alias Duet.AppServerCommon
 
+  test "non-JSON output preserves state without calling the message handler" do
+    assert %{ready: false} =
+             AppServerCommon.decode_and_process(
+               "app-server starting",
+               %{ready: false},
+               fn _, _ -> flunk("non-JSON output reached the handler") end,
+               "[test]"
+             )
+  end
+
+  test "message handler failures propagate instead of being treated as non-JSON output" do
+    assert_raise RuntimeError, "initialize failed", fn ->
+      AppServerCommon.decode_and_process(
+        ~s|{"error":{"message":"initialize failed"}}|,
+        %{},
+        fn _, _ -> raise "initialize failed" end,
+        "[test]"
+      )
+    end
+  end
+
   test "decode_and_process/4 decodes valid UTF-8 JSON lines" do
     line = ~s|{"method":"echo","params":{"text":"依頼内容"}}|
 

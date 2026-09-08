@@ -46,6 +46,7 @@ defmodule Duet do
   Sends a prompt to a named entry.
 
   Returns `{:ok, response}` or `{:error, reason}`.
+  A call timeout exits the caller; it does not interrupt the entry's turn or queue.
   """
   def post(entry_name, prompt) when is_binary(entry_name) and is_binary(prompt) do
     name = {:via, Registry, {Duet.EntryRegistry, entry_name}}

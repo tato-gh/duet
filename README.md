@@ -88,6 +88,19 @@ claude "duetを使って、しりとりを10ターン続けて"
 
 `skill-duet-config` は任意です。AI エージェントに `DUET.md` の整理、entry の追加、role や権限設定の見直しを任せたいプロジェクトで配置します。
 
+## 協働の進め方を選ぶ
+
+`skill_examples/` には、基本操作と設定編集に加えて、次の運用例があります。
+orchestra系とbridgeは別々の運用であり、同じ作業に併用しません。orchestra系の2種類も管理単位に合わせて一方を選びます。
+
+| skill | 使う場面 | メインAIの担当 |
+| --- | --- | --- |
+| [skill-duet-bridge](skill_examples/skill-duet-bridge/SKILL.md) | ユーザーと相談しながら、必要なplayerを都度選ぶ | 対話、判断材料の統合、直接作業または委譲 |
+| [skill-duet-orchestra](skill_examples/skill-duet-orchestra/SKILL.md) | フェーズとticketを使って作業を進める | 進行と完了判定。実装・レビュー・記録はworker / reviewer / scribeへ委譲 |
+| [skill-duet-release-orchestra](skill_examples/skill-duet-release-orchestra/SKILL.md) | release / ticketとquickfixを管理する | orchestraの役割分担に加え、releaseの区切りとユーザーによる漏れ候補の確認を管理 |
+
+いずれも操作には`skill-duet`を使います。必要なentryと管理ファイルは、選んだskillの初期設定referenceを参照してください。
+
 ## 設定
 
 設定はプロジェクトディレクトリの `DUET.md` に YAML front matter で書きます。
@@ -127,6 +140,11 @@ entries:
 | `node_name` | `duet@<hostname>` | Duet の Erlang ノード名 |
 | `entries` | `[]` | 起動する entry の配列 |
 
+付属の操作スクリプトは依存ライブラリなしで接続先だけを読みます。
+`node_name`はトップレベルに1行で書き、英数字・`_`・`.`・`@`・`-`を使ってください。
+引用符なし、単一引用符、二重引用符、および空白に続く行末コメントに対応します。
+省略時は本体と同じ`duet@<hostname>`です。YAMLのaliasや複数行scalarは操作スクリプトでは扱いません。
+
 entry:
 
 | キー | デフォルト | 説明 |
@@ -149,11 +167,20 @@ custom app-server commandを使う場合、tool実行環境までの伝播はそ
 
 Duet は `DUET.md` と `DUET_TIMEOUT_MINUTES` を起動時にだけ読みます。ファイル変更の監視や hot reload はしないため、entry の追加・削除、role、`model`、`reasoning_effort`、`service_tier`、タイムアウト設定の変更を反映するには Duet を再起動してください。
 
+Duetは非対話運用です。承認要求をユーザーへ転送する機能はなく、受信した承認要求は拒否します。
+`approval_policy: "on-request"`などを指定しても、人間が承認できる運用にはなりません。
+ユーザー入力要求には、入力を提供できない旨を返します。
+
 ## 操作
 
 - `/clear`: 選択した entry の thread を新しくする
 - `/compact`: 現在の thread を要約し、新しい thread に引き継ぐ
 - `interrupt.exs ENTRY_NAME`: 実行中の turn だけを中断する。予約済みの依頼は維持する。
+
+`DUET_TIMEOUT_MINUTES`は呼び出し側の応答待機時間であり、entryの作業時間の上限ではありません。
+待機がタイムアウトしても、実行中のturnと予約済みの依頼は自動では中断されません。
+停止が必要なら`interrupt.exs`を使い、再送前に変更ファイルや実行結果を確認してください。
+タイムアウトは通常の`{:error, reason}`応答ではなく、呼び出しのexitとして伝わります。
 
 ## API
 

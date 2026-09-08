@@ -5,28 +5,7 @@ if System.get_env("CODEX_DUET_ENTRY") == "1" do
   System.halt(1)
 end
 
-defmodule DuetScript do
-  def get_node_name do
-    case File.read(Path.join(File.cwd!(), "DUET.md")) do
-      {:ok, content} ->
-        case Regex.run(~r/node_name:\s*"?([^"\n]+)"?/, content) do
-          [_, node_name] -> String.trim(node_name)
-          _ -> "duet"
-        end
-
-      {:error, :enoent} ->
-        "duet"
-    end
-  end
-
-  def node_atom(node_name) do
-    if String.contains?(node_name, "@") do
-      String.to_atom(node_name)
-    else
-      String.to_atom("#{node_name}@localhost")
-    end
-  end
-end
+Code.require_file("client.exs", __DIR__)
 
 Node.set_cookie(:duet_cookie)
 node = DuetScript.get_node_name() |> DuetScript.node_atom()

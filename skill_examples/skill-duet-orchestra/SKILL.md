@@ -9,6 +9,7 @@ description: 「skill-duet-orchestraで進めて」「duet orchestra」「オー
 プロジェクト状態の原本は `docs/project_management/` に置き、duet entry は task 単位の実行主体・レビュー主体・記録主体として使う。
 
 この skill の中核は役割境界である。
+操作には`skill-duet`を使う。
 
 ## 絶対境界
 
@@ -47,7 +48,7 @@ ticket 数が増えるほど、オーケストレータ側の context は単調�
 このため、無人で多数 ticket を回すときは以下を意識する。
 
 - entry に渡す dispatch プロンプトに ticket 内容 (Goal / Scope / Done Criteria) を再掲しない。entry は ticket を直接読む
-- reviewer 指摘を worker に戻すときは要約せず原文を引用する。要約しても精度が落ちるだけで、自分の context は減らない
+- reviewer 指摘の渡し方は「短い依頼を保つ」に従う
 - ユーザー向けの状況報告は、判断に必要な要点だけにする。長文サマリは context を浪費する
 - 実装 diff やテスト出力の精読は矛盾検出時に限る (上記の通り)
 - ticket / git status の軽い確認は維持する。判断品質を落とすほど削らない
@@ -78,8 +79,7 @@ docs/project_management/
 - `references/duet_md_initial.md`: `DUET.md` 初期設定例と entry role
 - `references/project_management_initial.md`: `docs/project_management/` 初期ファイル例
 
-初期ファイルがない場合でも、オーケストレータ自身は直接作成しない。
-ユーザーに確認し、`scribe` に委譲するか、明示的な通常作業モードへ切り替える。
+初期ファイルがない場合の扱いは「開始手順」に従う。
 
 ## Ticket 形式
 
@@ -120,8 +120,8 @@ ticket 詳細を作る場合は、最低限この見出しを使う。
 フェーズ設計や ticket 分解はオーケストレータが project_management を読んで短く判断する。
 必要なときだけ `worker` または `reviewer` に短く相談する。
 
-`DUET.md` の role は entry だけが読む。
-この skill 名やオーケストレータ内部の説明ではなく、entry が単独で実行できる行動指示を書く。
+`DUET.md` の role は、entry が単独で理解・実行できる行動指示として書く。
+この skill 名やオーケストレータ内部の説明を知っていることを前提にしない。
 
 role には以下を必ず含める。
 
@@ -153,14 +153,14 @@ role には以下を必ず含める。
 ## Ticket 実行ループ
 
 1. `Current` ticket を1つ選ぶ。なければ `Todo` から次候補を選び、移動を scribe に依頼する
-2. worker への最初の依頼の直前に `/clear` または `/compact` を送る（判定基準は「compact / clear」節）。その上で worker に ticket path と目的だけを渡す。詳細説明は繰り返さず、ticket を読ませる
+2. 「compact / clear」に従ってworkerの文脈を切り替え、ticket pathと目的を渡す。詳細はticketを読ませる
 3. worker の報告を受け、必要なら追加作業を worker に依頼する
 4. オーケストレータは worker 報告、変更ファイル一覧、`git status --short`、ticket の Scope / Done Criteria の整合性を見る。実装内容の詳細レビューは reviewer に委譲する
-5. reviewer への最初の依頼の直前に `/clear` または `/compact` を送る。その上で ticket path、最新 diff、worker 報告を見せてレビューさせる
-6. reviewer の重大指摘、未完了判定、追加作業要求があれば、その指摘を要約しすぎず worker に戻す。worker には reviewer 指摘、ticket path、守るべき Scope だけを渡し、対応後に変更ファイル・検証結果・未解決事項を再報告させる
-7. worker の再対応後は、必要に応じて reviewer に再レビューさせる（同一 ticket 内なので `/clear` も `/compact` も送らない）
-8. orchestrator が Done Criteria と Verification を満たしたと判断したら、scribe に ticket と kanban の更新を依頼する。scribe は独立に同条件を確認し、満たしていなければ Done に移さず差し戻す
-9. 長い継続 ticket では節目ごとに worker に `/compact` を送る
+5. 「compact / clear」に従ってreviewerの文脈を切り替え、ticket path、最新diff、worker報告を見せてレビューさせる
+6. reviewerの重大指摘、未完了判定、追加作業要求があれば、「短い依頼を保つ」に従ってworkerへ戻し、変更ファイル・検証結果・未解決事項を再報告させる
+7. workerの再対応後は、必要に応じてreviewerに再レビューさせる
+8. 「完了判定」に従ってscribeへticketとkanbanの更新を依頼する
+9. 長い継続ticketの文脈管理は「compact / clear」に従う
 
 ## 短い依頼を保つ
 
@@ -168,7 +168,7 @@ role には以下を必ず含める。
 詳細はファイルに置く。
 
 entry は ticket を直接読むため、依頼文に Goal / Scope / Done Criteria を再掲しない。
-worker に追加作業を戻すときは、reviewer 指摘の原文を引用する形で渡し、要約はしない。
+workerへ追加作業を戻すときは、対応対象のreviewer指摘を原文で引用し、ticket pathと守るべきScopeを添える。条件や留保を落とさないため、指摘を要約で置き換えない。補足する場合は原文と区別する。
 
 worker への例:
 
@@ -199,7 +199,8 @@ docs/project_management/ 以外は触らないでください。
 `/compact` と `/clear` は、オーケストレータが duet entry へ送る文脈制御コマンドである。
 entry の role ではなく、指揮者側の手順として扱う。
 
-- worker / reviewer に対しては、ticket の最初の依頼の直前に `/clear` または `/compact` を送る。会話セッションに直前依頼の内容が残っており、それが次の作業/判断に効くと見える場合のみ `/compact`、それ以外は `/clear`。同一 ticket 内の再依頼の前には送らない
+- worker / reviewer に対しては、ticket の最初の依頼の直前に `/clear` または `/compact` を送る。会話セッションに直前依頼の内容が残っており、それが次の作業/判断に効くと見える場合のみ `/compact`、それ以外は `/clear`
+- 同一ticket内の再依頼では文脈を維持する。長期化した場合のみ次項のHandoff後にcompactする
 - 同じ ticket が長く続く: scribe に Handoff 更新を依頼した後、worker に `/compact` を送る
 - scribe は project_management の記録役なので、フェーズ内は必要に応じて `/compact` を送る。フェーズ切替時は `/clear` を送る
 - `/compact` 前に、消えると困る内容が ticket の `Handoff`、`Decisions`、`Verification` に残っているか確認する
