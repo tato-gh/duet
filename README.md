@@ -56,6 +56,8 @@ prefix_rule(
 
 別ターミナルで起動します。
 
+Duetは起動時にErlangのノード探索に必要な`epmd`をデーモンとして自動起動します。
+
 ```bash
 ~/duet/bin/duet.escript /path/to/project
 ```
