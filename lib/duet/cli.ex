@@ -42,6 +42,8 @@ defmodule Duet.CLI do
   end
 
   defp start_node(node_name) do
+    Application.put_env(:kernel, :inet_dist_use_interface, {127, 0, 0, 1})
+
     case Node.start(resolve_node_name(node_name), :shortnames) do
       {:ok, _} ->
         Node.set_cookie(:duet_cookie)

@@ -205,8 +205,5 @@ defmodule Duet.Config do
     %{node_name: default_node_name(), entries: []}
   end
 
-  defp default_node_name do
-    {:ok, hostname} = :inet.gethostname()
-    "duet@#{hostname}"
-  end
+  defp default_node_name, do: "duet@localhost"
 end

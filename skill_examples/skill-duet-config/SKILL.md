@@ -55,7 +55,7 @@ Codex CLI のバージョン差分が疑わしい場合は `codex app-server --h
 
 | 項目 | 意味 | 設定値・編集方針 |
 | --- | --- | --- |
-| `node_name` | Duet の Erlang node 名 | 省略時は`duet@<hostname>`。付属スクリプトを使う場合はトップレベルの1行に英数字・`_`・`.`・`@`・`-`で書く。単一・二重引用符と行末コメントに対応。変更すると接続先名に影響するため確認する |
+| `node_name` | Duet の Erlang node 名 | 省略時は`duet@localhost`。付属スクリプトを使う場合はトップレベルの1行に英数字・`_`・`.`・`@`・`-`で書く。単一・二重引用符と行末コメントに対応。変更すると接続先名に影響するため確認する |
 | `entries` | 起動する entry の一覧 | entry 追加は用途が明確なら行ってよい。削除、名称変更、統合は確認する |
 | `entries[].name` | entry の識別名 | 必須。skill や RPC 呼び出しで使うため、既存名の変更は確認する |
 | `entries[].command` | app-server 起動コマンド | 通常は `"codex app-server"`。`--listen`、`--config`、`--enable` などを足す場合は影響範囲を確認する |

@@ -147,13 +147,14 @@ entries:
 
 | キー | デフォルト | 説明 |
 | --- | --- | --- |
-| `node_name` | `duet@<hostname>` | Duet の Erlang ノード名 |
+| `node_name` | `duet@localhost` | Duet の Erlang ノード名 |
 | `entries` | `[]` | 起動する entry の配列 |
 
 付属の操作スクリプトは依存ライブラリなしで接続先だけを読みます。
 `node_name`はトップレベルに1行で書き、英数字・`_`・`.`・`@`・`-`を使ってください。
 引用符なし、単一引用符、二重引用符、および空白に続く行末コメントに対応します。
-省略時は本体と同じ`duet@<hostname>`です。YAMLのaliasや複数行scalarは操作スクリプトでは扱いません。
+Duet 本体の配布通信は `127.0.0.1` で待ち受け、同じホスト内から操作します。
+省略時は本体と同じ`duet@localhost`です。YAMLのaliasや複数行scalarは操作スクリプトでは扱いません。
 
 entry 共通:
 

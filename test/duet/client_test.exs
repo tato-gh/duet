@@ -19,6 +19,7 @@ defmodule Duet.ClientTest do
 
   test "client and server use the same default with no node_name or no file", %{path: path} do
     assert {:ok, config} = Duet.Config.parse(path)
+    assert config.node_name == "duet@localhost"
     assert DuetScript.get_node_name(path) == config.node_name
 
     File.write!(path, "---\nentries: []\n---\nnode_name: wrong-node\n")

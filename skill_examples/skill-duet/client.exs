@@ -87,10 +87,7 @@ defmodule DuetScript do
     end
   end
 
-  defp default_node_name do
-    {:ok, hostname} = :inet.gethostname()
-    "duet@#{hostname}"
-  end
+  defp default_node_name, do: "duet@localhost"
 
   defp parse_node_name(value) do
     # Node identifiers need no YAML escapes. Accept plain, single-quoted and
