@@ -69,22 +69,103 @@ defmodule Duet.Config do
   defp build_entries(_), do: {:error, "entries must be a list"}
 
   defp build_entry(%{"name" => name} = entry) when is_binary(name) and name != "" do
-    {:ok,
-     %{
-       name: name,
-       command: Map.get(entry, "command", @default_entry.command),
-       role: Map.get(entry, "role", @default_entry.role),
-       model: normalize_optional_string(Map.get(entry, "model")),
-       reasoning_effort: normalize_reasoning_effort(Map.get(entry, "reasoning_effort")),
-       service_tier: normalize_service_tier(Map.get(entry, "service_tier")),
-       approval_policy: Map.get(entry, "approval_policy", @default_entry.approval_policy),
-       thread_sandbox: Map.get(entry, "thread_sandbox", @default_entry.thread_sandbox),
-       turn_sandbox_policy:
-         Map.get(entry, "turn_sandbox_policy", @default_entry.turn_sandbox_policy)
-     }}
+    case Map.get(entry, "backend", "codex") do
+      "codex" -> build_codex_entry(entry)
+      "claude" -> build_claude_entry(entry)
+      backend -> {:error, "Unknown backend for entry #{name}: #{inspect(backend)}"}
+    end
   end
 
   defp build_entry(_), do: {:error, "entries item is missing required field 'name'"}
+
+  defp build_codex_entry(%{"name" => name} = entry) do
+    with :ok <- reject_keys(entry, ["permission_mode", "tools", "allowed_tools"], "codex") do
+      {:ok,
+       %{
+         name: name,
+         backend: :codex,
+         command: Map.get(entry, "command", @default_entry.command),
+         role: Map.get(entry, "role", @default_entry.role),
+         model: normalize_optional_string(Map.get(entry, "model")),
+         reasoning_effort: normalize_reasoning_effort(Map.get(entry, "reasoning_effort")),
+         service_tier: normalize_service_tier(Map.get(entry, "service_tier")),
+         approval_policy: Map.get(entry, "approval_policy", @default_entry.approval_policy),
+         thread_sandbox: Map.get(entry, "thread_sandbox", @default_entry.thread_sandbox),
+         turn_sandbox_policy:
+           Map.get(entry, "turn_sandbox_policy", @default_entry.turn_sandbox_policy)
+       }}
+    end
+  end
+
+  defp build_claude_entry(%{"name" => name} = entry) do
+    allowed =
+      ~w(name backend command role model reasoning_effort permission_mode tools allowed_tools)
+
+    command = Map.get(entry, "command", "claude")
+    role = Map.get(entry, "role", "")
+    model = Map.get(entry, "model")
+    effort = Map.get(entry, "reasoning_effort")
+    permission_mode = Map.get(entry, "permission_mode", "dontAsk")
+    tools = Map.get(entry, "tools", ["Read", "Glob", "Grep"])
+    allowed_tools = Map.get(entry, "allowed_tools", [])
+
+    with :ok <- reject_keys(entry, Map.keys(entry) -- allowed, "claude"),
+         :ok <- valid_setting(is_binary(command) and command != "", name, "command"),
+         :ok <- valid_setting(is_binary(role), name, "role"),
+         :ok <- valid_setting(is_nil(model) or (is_binary(model) and model != ""), name, "model"),
+         :ok <-
+           valid_setting(
+             effort in [nil, "low", "medium", "high", "xhigh", "max"],
+             name,
+             "reasoning_effort"
+           ),
+         :ok <-
+           valid_setting(
+             permission_mode in [
+               "default",
+               "dontAsk",
+               "acceptEdits",
+               "plan",
+               "auto",
+               "bypassPermissions"
+             ],
+             name,
+             "permission_mode"
+           ),
+         :ok <- valid_setting(string_list?(tools), name, "tools"),
+         :ok <- valid_setting(string_list?(allowed_tools), name, "allowed_tools") do
+      {:ok,
+       %{
+         name: name,
+         backend: :claude,
+         command: command,
+         role: role,
+         model: model,
+         reasoning_effort: effort,
+         permission_mode: permission_mode,
+         tools: tools,
+         allowed_tools: allowed_tools
+       }}
+    end
+  end
+
+  defp string_list?(values) when is_list(values),
+    do: Enum.all?(values, &(is_binary(&1) and &1 != ""))
+
+  defp string_list?(_), do: false
+
+  defp valid_setting(true, _name, _key), do: :ok
+  defp valid_setting(false, name, key), do: {:error, "Invalid #{key} for entry #{name}"}
+
+  defp reject_keys(entry, keys, backend) do
+    unsupported = Enum.filter(keys, &Map.has_key?(entry, &1))
+
+    if unsupported == [],
+      do: :ok,
+      else:
+        {:error,
+         "Unsupported settings for #{backend} entry #{entry["name"]}: #{inspect(unsupported)}"}
+  end
 
   defp normalize_service_tier("fast"), do: "fast"
   defp normalize_service_tier(_), do: @default_entry.service_tier

@@ -43,6 +43,76 @@ defmodule Duet do
   end
 
   @doc """
+  Returns configured and running entries with backend, status, queue length and reason.
+  Status is :starting, :ready, :busy, :interrupt_unknown, :failed or :unavailable.
+  Unlike entries/0, stopped configured entries remain visible.
+  """
+  def statuses do
+    configured =
+      case Registry.meta(Duet.EntryRegistry, :configured_entries) do
+        {:ok, entries} -> entries
+        :error -> []
+      end
+
+    (configured ++ entries())
+    |> Enum.uniq_by(& &1.name)
+    |> Enum.sort_by(& &1.name)
+    |> Task.async_stream(
+      fn entry ->
+        fallback = %{
+          name: entry.name,
+          role: entry.role,
+          backend: Map.get(entry, :backend, :unknown),
+          status: :unavailable,
+          queued: nil,
+          reason: nil
+        }
+
+        try do
+          GenServer.call(entry_name(entry.name), :get_status, 1_000)
+        catch
+          :exit, _ ->
+            case Registry.meta(Duet.EntryRegistry, {:entry_failure, entry.name}) do
+              {:ok, failure} -> Map.merge(fallback, failure)
+              :error -> fallback
+            end
+        end
+      end,
+      timeout: :infinity,
+      ordered: true
+    )
+    |> Enum.map(fn {:ok, status} -> status end)
+  end
+
+  @doc false
+  def entry_status(state, backend) do
+    status =
+      case state.status do
+        :idle -> :ready
+        phase when phase in [:starting, :initializing, :session_ready] -> :starting
+        :interrupt_unknown -> :interrupt_unknown
+        _ -> :busy
+      end
+
+    %{
+      name: state.name,
+      role: state.role,
+      backend: backend,
+      status: status,
+      queued: :queue.len(state.pending_posts),
+      reason: nil
+    }
+  end
+
+  @doc false
+  def record_entry_failure(name, reason) do
+    Registry.put_meta(Duet.EntryRegistry, {:entry_failure, name}, %{
+      status: :failed,
+      reason: reason
+    })
+  end
+
+  @doc """
   Sends a prompt to a named entry.
 
   Returns `{:ok, response}` or `{:error, reason}`.
@@ -175,7 +245,8 @@ defmodule Duet.Application do
       end
 
     children = [
-      {Registry, keys: :unique, name: Duet.EntryRegistry},
+      {Registry,
+       keys: :unique, name: Duet.EntryRegistry, meta: [configured_entries: config.entries]},
       Duet.EntrySupervisor
     ]
 
@@ -195,9 +266,10 @@ defmodule Duet.Application do
     Enum.each(entries, fn entry ->
       case Duet.EntrySupervisor.start_entry(entry) do
         {:ok, _pid} ->
-          Logger.info("Duet entry started: #{entry.name}")
+          :ok
 
         {:error, reason} ->
+          Duet.record_entry_failure(entry.name, reason)
           Logger.error("Failed to start Duet entry #{entry.name}: #{inspect(reason)}")
       end
     end)

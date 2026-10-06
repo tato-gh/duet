@@ -1,0 +1,119 @@
+# Deterministic stream-json peer; no credentials or model calls.
+[log_path | args] = System.argv()
+session = System.pid()
+
+log = fn message ->
+  File.write!(log_path, JSON.encode!(Map.put(message, :session, session)) <> "\n", [:append])
+end
+
+send_message = fn message -> IO.puts(JSON.encode!(message)) end
+
+result = fn text, error ->
+  send_message.(%{
+    type: "result", subtype: if(error, do: "error_during_execution", else: "success"),
+    is_error: error, result: text, session_id: session
+  })
+end
+
+log.(%{args: args, entry: System.get_env("CODEX_DUET_ENTRY_NAME"),
+  claudecode: System.get_env("CLAUDECODE")})
+
+loop = fn loop, pending, history ->
+  case IO.read(:stdio, :line) do
+    :eof -> :ok
+    {:error, _} -> :ok
+    line ->
+      message = JSON.decode!(line)
+      log.(%{received: message})
+
+      case message do
+        %{"type" => "control_request", "request" => %{"subtype" => subtype}} ->
+          response = %{subtype: "success", request_id: message["request_id"], response: %{}}
+          case subtype do
+            "initialize" ->
+              response = if "--initialize-error" in args,
+                do: Map.merge(response, %{subtype: "error", error: "initialization refused"}),
+                else: response
+              send_message.(%{type: "control_response", response: response})
+              loop.(loop, pending, history)
+            "interrupt" ->
+              case pending do
+                "missing ack" ->
+                  result.("interrupted", true)
+                "reject interrupt" ->
+                  send_message.(%{type: "control_response", response:
+                    Map.merge(response, %{subtype: "error", error: "cannot interrupt"})})
+                  result.("finished normally", false)
+                "result before ack" ->
+                  result.("interrupted", true)
+                  send_message.(%{type: "control_response", response: response})
+                _ ->
+                  send_message.(%{type: "control_response", response: response})
+                  result.("interrupted", true)
+              end
+              loop.(loop, nil, history)
+          end
+
+        %{"type" => "user", "message" => %{"content" => text}} ->
+          send_message.(%{type: "system", subtype: "init", session_id: session})
+          cond do
+            text == "exit" -> System.halt(7)
+            text in ["wait", "result before ack", "reject interrupt", "missing ack"] ->
+              loop.(loop, text, history)
+            text == "permission" ->
+              send_message.(%{type: "control_request", request_id: "permission-1",
+                request: %{subtype: "can_use_tool", tool_name: "Bash", input: %{}}})
+              loop.(loop, pending, history)
+            text == "unsupported control" ->
+              send_message.(%{type: "control_request", request_id: "unknown-1",
+                request: %{subtype: "unknown"}})
+              loop.(loop, pending, history)
+            text == "fail" ->
+              result.("model failed", true)
+              loop.(loop, pending, history)
+            text == "api failure" ->
+              send_message.(%{type: "result", subtype: "success", is_error: true,
+                errors: [], result: "API Error: authentication failed", session_id: session})
+              loop.(loop, pending, history)
+            text in ["background", "background idle first"] ->
+              send_message.(%{type: "system", subtype: "session_state_changed", state: "running"})
+              result.("intermediate result", false)
+              send_message.(%{type: "control_request", request_id: "background",
+                request: %{subtype: "can_use_tool", tool_name: "Bash", input: %{}}})
+              loop.(loop, text, history)
+            text == "after background" ->
+              send_message.(%{type: "system", subtype: "session_state_changed", state: "running"})
+              result.("next request result", false)
+              send_message.(%{type: "system", subtype: "session_state_changed", state: "idle"})
+              loop.(loop, nil, history)
+            String.contains?(text, "引き継ぎメモを作成してください") ->
+              result.(if("empty summary" in history, do: "", else: "引き継ぎ要約"), false)
+              loop.(loop, pending, history)
+            true ->
+              # Intermediate assistant/tool/subagent events must not complete a post.
+              send_message.(%{type: "assistant", parent_tool_use_id: "child",
+                message: %{content: [%{type: "text", text: "ignore child"}]}})
+              history = history ++ [text]
+              result.(Enum.join(history, "\n"), false)
+              loop.(loop, pending, history)
+          end
+
+        %{"type" => "control_response", "response" => %{"request_id" => "background"}} ->
+          send_message.(%{type: "assistant", parent_tool_use_id: nil,
+            message: %{content: [%{type: "text", text: "background finished"}]}})
+          idle = %{type: "system", subtype: "session_state_changed", state: "idle"}
+          if pending == "background idle first", do: send_message.(idle)
+          result.("complete result", false)
+          if pending != "background idle first", do: send_message.(idle)
+          loop.(loop, nil, history)
+
+        %{"type" => "control_response", "response" => response} ->
+          result.(JSON.encode!(response), false)
+          loop.(loop, pending, history)
+
+        _ -> raise "unexpected protocol: #{inspect(message)}"
+      end
+  end
+end
+
+loop.(loop, nil, [])

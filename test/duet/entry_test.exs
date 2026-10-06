@@ -97,12 +97,14 @@ defmodule Duet.EntryTest do
     wait_until_status("broadcast", :waiting)
 
     assert {:ok, ["broadcast"]} = Duet.cast_all("branch changed")
+    assert [%{backend: :codex, status: :busy, queued: 1}] = Duet.statuses()
     assert {:error, :busy} = Duet.post("broadcast", "direct prompt")
 
     assert [{"broadcast", {:error, :busy}}] = Duet.post_all("busy prompt")
 
     assert {:ok, "引き継ぎを確認しました"} = Task.await(first_post)
     wait_until_idle("broadcast")
+    assert [%{backend: :codex, status: :ready, queued: 0}] = Duet.statuses()
 
     received = read_received_messages(log_path)
 

@@ -1,12 +1,12 @@
 # Duet
 
-Duet は、名前付きの LLM app-server セッションを常駐させ、AI エージェントから継続相談できるようにする Erlang RPC ブリッジです。
+Duet は、名前付きの Codex / Claude Code セッションを常駐させ、AI エージェントから継続相談できるようにする Erlang RPC ブリッジです。
 
-各 entry は独立した app-server プロセスと thread context を持ちます。同じ entry に続けて依頼すると、前回までの文脈を保ったまま会話できます。
+各 entry は独立した CLI プロセスと会話文脈を持ちます。同じ entry に続けて依頼すると、前回までの文脈を保ったまま会話できます。Codex は `codex app-server`、Claude Code は `claude -p` の双方向 `stream-json` を使います。
 
 ## 前提条件
 
-- `codex app-server` が使えること
+- 使用する backend の CLI がインストール・認証済みであること（Codex: `codex app-server`、Claude Code: `claude`）
 - Elixir
 - AI エージェント CLI（例: Claude Code）
 
@@ -132,6 +132,14 @@ entries:
     turn_sandbox_policy:
       type: "workspaceWrite"
       networkAccess: true
+
+  - name: "claude_reviewer"
+    backend: "claude"
+    role: "設計・コードのレビュー担当。問題点と改善案を簡潔に説明する。"
+    model: "sonnet"
+    reasoning_effort: "high"
+    permission_mode: "dontAsk"
+    tools: ["Read", "Glob", "Grep"]
 ---
 ```
 
@@ -147,19 +155,54 @@ entries:
 引用符なし、単一引用符、二重引用符、および空白に続く行末コメントに対応します。
 省略時は本体と同じ`duet@<hostname>`です。YAMLのaliasや複数行scalarは操作スクリプトでは扱いません。
 
-entry:
+entry 共通:
 
 | キー | デフォルト | 説明 |
 | --- | --- | --- |
 | `name` | 必須 | entry 名。skill や RPC 呼び出しで使う識別子 |
-| `command` | `codex app-server` | app-server 起動コマンド |
-| `role` | `""` | thread の初回ターンだけに付与するロール文 |
-| `model` | 未指定 | `thread/start` に渡すモデル。例: `"gpt-5.6-luna"` |
-| `reasoning_effort` | 未指定 | `turn/start` に渡す推論強度。例: `"high"` |
+| `backend` | `codex` | `codex` または `claude`。同じ設定内で併用可能 |
+| `command` | backend による | Codex: `codex app-server`。Claude: `claude`（実行ファイルやラッパーの変更用。必須引数は Duet が追加） |
+| `role` | `""` | 会話の初回ターンだけに付与するロール文 |
+| `model` | 未指定 | Codex の `thread/start`、Claude の `--model` に渡すモデル |
+| `reasoning_effort` | 未指定 | Codex の `effort`、Claude の `--effort`。Claude は `low` / `medium` / `high` / `xhigh` / `max`（モデルによる対応差あり） |
+
+Codex 専用:
+
+| キー | デフォルト | 説明 |
+| --- | --- | --- |
 | `service_tier` | 未指定 | `thread/start` の `serviceTier`。例: `"fast"` |
 | `approval_policy` | `"never"` | app-server に渡す approvalPolicy |
 | `thread_sandbox` | `"read-only"` | `thread/start` に渡す sandbox |
 | `turn_sandbox_policy` | `{"type":"readOnly","networkAccess":false}` | `turn/start` に渡す sandboxPolicy |
+
+Claude 専用:
+
+| キー | デフォルト | 説明 |
+| --- | --- | --- |
+| `permission_mode` | `"dontAsk"` | Claude の `--permission-mode`。`default` / `dontAsk` / `acceptEdits` / `plan` / `auto` / `bypassPermissions` |
+| `tools` | `["Read", "Glob", "Grep"]` | 使用する組み込みツールの配列。`[]` は組み込みツールなし、`["default"]` は全組み込みツール |
+| `allowed_tools` | `[]` | 自動承認するツール規則の配列。例: `["Bash(mix test *)"]` |
+
+Claude entry に Codex 専用設定を指定すると起動時の設定エラーになります。
+Claude 専用設定を Codex entry に指定した場合もエラーです。
+Claude の未知のキー、不正な型・値、未知の backend は黙って無視せずエラーにします。
+`backend` の省略時は Codex のため、既存の設定は変更不要です。
+
+Claude の既定の組み込みツールは読み取り用途に限定していますが、これは Codex の OS sandbox と同じものではありません。
+Claude 自身の認証・設定・CLAUDE.md・hooks・MCP の読込は CLI に従います。
+編集用 entry では `permission_mode: "acceptEdits"` と `tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]` などを明示します。
+`allowed_tools` は利用可能なツールへの承認規則であり、`tools` にない組み込みツールを追加しません。
+
+Claude の起動時には `-p --input-format stream-json --output-format stream-json --verbose` と、
+制御要求用の `--permission-prompt-tool stdio`、上記の設定に対応する引数を追加します。
+`command` のラッパーは追加引数を CLI に渡してください。
+Duet は stdin を開いたまま保ち、ターン間で同じプロセス・会話を再利用します。
+Claude がセッション状態通知を提供する場合は、`result` と `idle` の両方を待って応答・次の予約処理へ進みます。
+状態通知のない旧 CLI では `result` を完了として扱うため、バックグラウンド agent の継続処理までの完了は保証しません。
+Claude の初期化エラー・初期化タイムアウト・初期化中の CLI 終了では、その entry を停止し、即時再起動しません。
+正常な entry を巻き込む再起動ループを避けるためです。ログを確認して設定や認証を修正後、Duet を再起動してください。
+プロトコルの参照先: [Claude CLI](https://code.claude.com/docs/en/cli-reference)、
+[Anthropic Agent SDK の制御処理](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/query.py)。
 
 Duetはentry processへ`CODEX_DUET_ENTRY=1`と`CODEX_DUET_ENTRY_NAME=<entry名>`を設定します。
 `codex app-server` commandにはCodexの`shell_environment_policy.set`も自動で追加し、turn内のshell commandへ同じ値を渡します。
@@ -172,12 +215,32 @@ Duet は `DUET.md` と `DUET_TIMEOUT_MINUTES` を起動時にだけ読みます�
 Duetは非対話運用です。承認要求をユーザーへ転送する機能はなく、受信した承認要求は拒否します。
 `approval_policy: "on-request"`などを指定しても、人間が承認できる運用にはなりません。
 ユーザー入力要求には、入力を提供できない旨を返します。
+Claude の `permission_mode: "default"` も人間への承認待ちにはなりません。
+対話承認を期待しやすい設定では起動時に説明を表示します。必要なツールと自動承認規則を明示してください。
 
 ## 操作
+
+起動ログの `ready (codex)` / `ready (claude)` は CLI の初期化完了を示します。
+`ready` はモデル呼び出しの認証・利用枠まで検証した結果ではありません。
+付属の `entries.exs --status` で backend、`starting` / `ready` / `busy` / `interrupt_unknown` /
+`failed` / `unavailable`、予約件数、停止理由を確認できます。初期化失敗で停止した設定済み entry も表示します。
+これはモデル呼び出しを伴わない内部状態の照会です。従来の `entries.exs` は起動中 entry の名前と role を表示します。
 
 - `/clear`: 選択した entry の thread を新しくする
 - `/compact`: 現在の thread を要約し、新しい thread に引き継ぐ
 - `interrupt.exs ENTRY_NAME`: 実行中の turn だけを中断する。予約済みの依頼は維持する。
+
+`post.exs` / `post_all.exs` で `/clear` が成功すると「会話をリセットしました。」と表示します。
+RPC の戻り値は従来どおり `{:ok, ""}` です。操作スクリプトは主要なエラーに対処方法も表示します。
+
+Claude でも同じ操作を使えます。`/clear` は Claude プロセスを起動し直して新しい会話を開始します。
+`/compact` は旧会話で要約を作成し、起動し直した Claude の新しい会話へ引き継ぎます。
+Claude 内蔵の `/compact` に処理を委譲するわけではありません。
+Claude の割り込み応答がタイムアウトすると、割り込み呼び出しと実行中の `post` は
+`{:error, :interrupt_timeout}` を返し、予約を保留します。遅れて応答・完了通知が届けば処理を再開します。
+応答が戻らない場合は `/clear` で新しい会話へ切り替えて復旧できます。旧会話の文脈は失われますが、予約は維持します。
+現在の終了処理は Port を閉じて CLI の stdin EOF による終了を促す方式です。
+OS プロセスの終了確認や SIGTERM/SIGKILL による回収は未実装のため、CLI が EOF に応答しない場合は旧プロセスが残る可能性があります。
 
 `DUET_TIMEOUT_MINUTES`は呼び出し側の応答待機時間であり、entryの作業時間の上限ではありません。
 待機がタイムアウトしても、実行中のturnと予約済みの依頼は自動では中断されません。
@@ -198,5 +261,6 @@ Node.connect(:duet@localhost)
 ```
 
 - `Duet.entries/0` returns running entries as `%{name: name, role: role}`.
+- `Duet.statuses/0` returns configured and running entries as `%{name: name, role: role, backend: backend, status: status, queued: count, reason: reason}`. Stopped configured entries remain visible; unavailable queue counts are `nil`.
 - `Duet.post/2` returns `{:ok, response}` or `{:error, reason}`.
 - `Duet.interrupt/1` returns `:ok` when the app-server accepts an interruption request. The active `post/2` then returns `{:error, "interrupted"}`; queued prompts continue normally.

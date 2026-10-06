@@ -17,10 +17,10 @@ case System.argv() do
 
     case :erpc.call(node, Duet, :post, [entry_name, prompt], :infinity) do
       {:ok, response} ->
-        IO.puts(response)
+        IO.puts(DuetScript.response_text(prompt, response))
 
       {:error, reason} ->
-        IO.puts(:stderr, "Error: #{inspect(reason)}")
+        IO.puts(:stderr, "Error: #{DuetScript.error_text(reason)}")
         System.halt(1)
     end
 

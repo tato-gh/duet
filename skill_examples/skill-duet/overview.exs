@@ -19,7 +19,7 @@ case System.argv() do
         IO.puts(response)
 
       {:error, reason} ->
-        IO.puts(:stderr, "Error: #{inspect(reason)}")
+        IO.puts(:stderr, "Error: #{DuetScript.error_text(reason)}")
         System.halt(1)
     end
 

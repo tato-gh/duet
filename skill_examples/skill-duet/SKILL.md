@@ -20,7 +20,9 @@ entry名が不明なとき、会話の初回、または`:not_found`が返った
 - 長い会話を要約して引き継ぐ場合は`/compact`を送る
 - 保持文脈が不明なentryと会話を再開する場合は`overview`で確認する
 
-entryは`DUET.md`のあるプロジェクトディレクトリで動く。ファイル操作の可否はentryの`approval_policy`、`thread_sandbox`、`turn_sandbox_policy`に従う。
+entryは`DUET.md`のあるプロジェクトディレクトリで動く。Codex のファイル操作は`approval_policy`、`thread_sandbox`、`turn_sandbox_policy`に従う。
+Claude は`permission_mode`、`tools`、`allowed_tools`に従う。Claude のツール制限は Codex の OS sandbox と同じではない。
+Duet は人間への承認要求を転送せず、対話承認が必要な要求を拒否する。
 
 PJ内の情報はパスや対象diffを示して読ませ、本文を転載しない。会話で決まった未記録の制約や、前回からの変更だけ補う。
 返答の扱いは依頼に合わせる。発想や反証は候補として、レビュー指摘は該当コードと根拠を確認して扱う。実装の完了は報告だけでなく差分と検証結果で確認する。判定では伴走中の同意や口調に引きずられず、目的・制約・根拠に照らして採否を決める。
@@ -51,6 +53,7 @@ elixir --sname NAME@localhost /absolute/path/to/skill-duet/post.exs ENTRY_NAME '
 | スクリプトと引数 | 用途と完了の意味 |
 | --- | --- |
 | `entries.exs` | 起動中entryの名前とroleを一覧する |
+| `entries.exs --status` | 設定済み・起動中entryのbackend、状態、予約件数、停止理由を確認する。停止した設定済みentryも表示する |
 | `post.exs ENTRY_NAME 'PROMPT'` | 1 entryの応答を待つ。処理中なら`busy` |
 | `post_all.exs 'PROMPT'` | 全entryへ送り、応答を待つ。処理中のentryには送らず、個別に`busy`を返す |
 | `cast_all.exs 'PROMPT'` | 全entryへの処理予約を確認して戻る。モデルの完了は待たず、応答は取得できない |
@@ -80,6 +83,13 @@ elixir --sname NAME@localhost /absolute/path/to/skill-duet/post.exs ENTRY_NAME '
 | `/compact` | 現在の会話の要約を作り、新しいthreadへ引き継ぐ |
 | `interrupt.exs ENTRY_NAME` | 実行中turnを中断する。中断された`post`は`"interrupted"`を返し、予約済みの依頼は続けて実行される |
 
+`post.exs` と `post_all.exs` は `/clear` 成功時に「会話をリセットしました。」と表示する。RPC の成功値は従来どおり `{:ok, ""}`。
+
+`entries.exs --status` はモデルを呼ばず、Duet の内部状態を照会する。
+`starting` は初期化中、`ready` は受付可能、`busy` は処理中、`interrupt_unknown` は割り込み成否未確認、
+`failed` は停止理由あり、`unavailable` は状態取得不可を示す。`queued` は実行待ちの予約件数で、実行中の依頼を含まない。
+`ready` は CLI の初期化完了を示す。実際のモデル呼び出し時に認証や利用枠のエラーが発生する可能性はある。
+
 ## 待機とエラー
 
 `post`・`post_all`・`overview`・`overview_all`の応答待機時間は、Duet起動時の`DUET_TIMEOUT_MINUTES`で設定する。既定は20分で、変更には再起動が必要。
@@ -88,9 +98,14 @@ elixir --sname NAME@localhost /absolute/path/to/skill-duet/post.exs ENTRY_NAME '
 
 | reason | 意味・対処 |
 | --- | --- |
-| `:not_found` | entry名が存在しない。`entries.exs`で再確認する |
-| `:busy` | entryが処理中。完了後に必要な依頼を再送する |
+| `:not_found` | 起動中entryが見つからない。`entries.exs --status`で設定済みentryの停止・失敗も確認する |
+| `:busy` | 初期化中または処理中。`entries.exs --status`で確認し、完了後に必要な依頼を再送する |
 | `:not_running` | 実行中turnがなく、中断は不要 |
 | `:not_interruptible` | turn ID取得前など。中断が必要なら少し待って再試行する |
 | `"failed"` / `"interrupted"` | turnが失敗または中断された。途中の変更と継続の必要性を確認してから再依頼する |
 | `{:rpc_error, error}` | app-serverのRPC error。内容を確認し、必要ならentryや依頼を見直す |
+| `{:claude_error, error}` | Claude の処理エラー。内容と起動側ログから認証・利用枠・モデル設定を確認する |
+| `:interrupt_timeout` | 割り込みの成否が未確認。自動再送せず状態とログを確認する。遅い応答で再開することがある。復旧しなければ `/clear`。旧会話は失われるが予約は維持する |
+| `{:initialize_failed, error}` / `:initialize_timeout` | 初期化失敗。ログで認証・設定を確認し、修正後に Duet を再起動する |
+| `{:port_exit, status}` | CLI が終了した。`entries.exs --status` と起動側ログを確認する |
+| `:empty_compact_summary` | 要約が空のため compact 中止。元の会話は維持される |

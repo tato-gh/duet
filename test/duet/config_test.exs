@@ -79,6 +79,81 @@ defmodule Duet.ConfigTest do
     assert message =~ "Unknown DUET.md keys"
   end
 
+  test "backends can coexist and existing entries default to codex" do
+    path =
+      tmp_file("""
+      ---
+      entries:
+        - name: old
+        - name: explicit
+          backend: codex
+        - name: reviewer
+          backend: claude
+          model: sonnet
+          reasoning_effort: high
+      ---
+      """)
+
+    assert {:ok, %{entries: [old, explicit, claude]}} = Duet.Config.parse(path)
+    assert old.backend == :codex
+    assert explicit.command == "codex app-server"
+    assert claude.backend == :claude
+    assert claude.command == "claude"
+    assert claude.model == "sonnet"
+    assert claude.reasoning_effort == "high"
+    assert claude.permission_mode == "dontAsk"
+    assert claude.tools == ["Read", "Glob", "Grep"]
+    refute Map.has_key?(claude, :thread_sandbox)
+  end
+
+  test "claude configuration rejects unsupported and malformed settings" do
+    for setting <- [
+          "service_tier: fast",
+          "thread_sandbox: read-only",
+          "turn_sandbox_policy: {}",
+          "approval_policy: never",
+          "reasoning_effort: none",
+          "permission_mode: typo",
+          "tools: default",
+          "allowed_tools: [true]",
+          "command: null",
+          "model: true",
+          "role: []",
+          "typo: value"
+        ] do
+      path = tmp_file("---\nentries:\n  - name: bad\n    backend: claude\n    #{setting}\n---\n")
+      assert {:error, message} = Duet.Config.parse(path), setting
+      assert message =~ "bad"
+    end
+  end
+
+  test "backend typos and claude-only settings on codex are rejected" do
+    for setting <- ["backend: typo", "backend: null", "permission_mode: dontAsk", "tools: []"] do
+      path = tmp_file("---\nentries:\n  - name: bad\n    #{setting}\n---\n")
+      assert {:error, _} = Duet.Config.parse(path)
+    end
+  end
+
+  test "claude accepts explicit tools and a custom executable" do
+    path =
+      tmp_file("""
+      ---
+      entries:
+        - name: worker
+          backend: claude
+          command: /opt/claude
+          permission_mode: acceptEdits
+          tools: [Read, Edit, Bash]
+          allowed_tools: ["Bash(mix test *)"]
+      ---
+      """)
+
+    assert {:ok, %{entries: [entry]}} = Duet.Config.parse(path)
+    assert entry.command == "/opt/claude"
+    assert entry.tools == ["Read", "Edit", "Bash"]
+    assert entry.allowed_tools == ["Bash(mix test *)"]
+  end
+
   defp tmp_file(content) do
     path = Path.join(System.tmp_dir!(), "duet-config-#{System.unique_integer([:positive])}.md")
     File.write!(path, content)

@@ -14,8 +14,11 @@ Node.connect(node)
 case :erpc.call(node, Duet, :overview_all, [], :infinity) do
   results when is_list(results) ->
     Enum.each(results, fn
-      {entry, {:ok, response}} -> IO.puts("[#{entry}]\n#{response}\n")
-      {entry, {:error, reason}} -> IO.puts(:stderr, "[#{entry}] Error: #{inspect(reason)}")
+      {entry, {:ok, response}} ->
+        IO.puts("[#{entry}]\n#{response}\n")
+
+      {entry, {:error, reason}} ->
+        IO.puts(:stderr, "[#{entry}] Error: #{DuetScript.error_text(reason)}")
     end)
 
     if Enum.any?(results, fn {_entry, result} -> match?({:error, _}, result) end) do
@@ -23,6 +26,6 @@ case :erpc.call(node, Duet, :overview_all, [], :infinity) do
     end
 
   {:error, reason} ->
-    IO.puts(:stderr, "Error: #{inspect(reason)}")
+    IO.puts(:stderr, "Error: #{DuetScript.error_text(reason)}")
     System.halt(1)
 end

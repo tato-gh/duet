@@ -36,7 +36,7 @@ defmodule Duet.AppServerCommon do
     Port.command(state.port, JSON.encode!(%{id: id, result: result}) <> "\n")
   end
 
-  def start_app_server(command, cwd, line_bytes, entry_name) do
+  def start_app_server(command, cwd, line_bytes, entry_name, extra_env \\ []) do
     bash = System.find_executable("bash") || raise "bash not found in PATH"
     command = inject_codex_shell_environment(command, entry_name)
 
@@ -48,12 +48,13 @@ defmodule Duet.AppServerCommon do
         :stderr_to_stdout,
         args: [~c"-lc", String.to_charlist(command)],
         cd: String.to_charlist(cwd),
-        env: [
-          {~c"CODEX_DUET_ENTRY", ~c"1"},
-          {~c"CODEX_DUET_ENTRY_NAME", String.to_charlist(entry_name)},
-          {~c"LANG", String.to_charlist(@utf8_locale)},
-          {~c"LC_ALL", String.to_charlist(@utf8_locale)}
-        ],
+        env:
+          [
+            {~c"CODEX_DUET_ENTRY", ~c"1"},
+            {~c"CODEX_DUET_ENTRY_NAME", String.to_charlist(entry_name)},
+            {~c"LANG", String.to_charlist(@utf8_locale)},
+            {~c"LC_ALL", String.to_charlist(@utf8_locale)}
+          ] ++ extra_env,
         line: line_bytes
       ]
     )

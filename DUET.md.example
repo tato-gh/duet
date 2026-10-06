@@ -2,6 +2,7 @@
 node_name: "duet"
 entries:
   - name: "chat_play"
+    # backend を省略すると codex
     command: "codex app-server"
     role: "雑談・遊びの相手。気軽で自然な会話を続ける。"
     model: "gpt-5.6-luna"
@@ -22,4 +23,17 @@ entries:
     turn_sandbox_policy:
       type: "workspaceWrite"
       networkAccess: true
+
+  - name: "claude_reviewer"
+    backend: "claude"
+    role: "設計・コードのレビュー担当。問題点と改善案を簡潔に説明する。"
+    model: "sonnet"
+    reasoning_effort: "high"
+    permission_mode: "dontAsk"
+    tools: ["Read", "Glob", "Grep"]
+    # command は既定で claude。stream-json などの必須引数は Duet が追加する。
+    # 編集も許可する場合の例:
+    # permission_mode: "acceptEdits"
+    # tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
+    # allowed_tools: ["Bash(mix test *)"]
 ---

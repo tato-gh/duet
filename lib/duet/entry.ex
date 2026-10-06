@@ -7,9 +7,9 @@ defmodule Duet.Entry do
 
   @port_line_bytes 1_048_576
   @non_interactive_answer "This is a non-interactive session. Operator input is unavailable."
-  @timeout_avoidance_practice """
-  もし完了の見通しが立たないリクエストを受けた場合は、まず全体像を把握し、ステップに分割した計画を提示したうえで、「1ステップずつ進めましょう」と相手に伝えてください。これはタイムアウト防止のためのプラクティスです。
-  """
+  import Duet.EntryPrompts
+
+  def start_link(%{backend: :claude} = config), do: Duet.ClaudeEntry.start_link(config)
 
   def start_link(%{name: name} = config) do
     GenServer.start_link(__MODULE__, config, name: {:via, Registry, {Duet.EntryRegistry, name}})
@@ -19,7 +19,7 @@ defmodule Duet.Entry do
     %{
       id: {__MODULE__, name},
       start: {__MODULE__, :start_link, [config]},
-      restart: :permanent,
+      restart: if(Map.get(config, :backend) == :claude, do: :transient, else: :permanent),
       type: :worker
     }
   end
@@ -39,6 +39,19 @@ defmodule Duet.Entry do
     reasoning_effort = Map.get(config, :reasoning_effort)
     service_tier = Map.get(config, :service_tier)
     cwd = Duet.Config.config_file_path() |> Path.dirname()
+
+    Registry.put_meta(Duet.EntryRegistry, {:entry_failure, name}, %{
+      status: :unavailable,
+      reason: nil
+    })
+
+    if approval_policy != "never" do
+      Logger.warning(
+        "[Duet.Entry:#{name}] Duet cannot forward approval prompts to an operator; " <>
+          "requests requiring approval will be denied (approval_policy=#{approval_policy})."
+      )
+    end
+
     port = AppServerCommon.start_app_server(command, cwd, @port_line_bytes, name)
 
     state = %{
@@ -76,6 +89,9 @@ defmodule Duet.Entry do
   def handle_call(:get_role, _from, state) do
     {:reply, state.role, state}
   end
+
+  def handle_call(:get_status, _from, state),
+    do: {:reply, Duet.entry_status(state, :codex), state}
 
   @impl true
   def handle_call({:post, _prompt}, _from, %{status: status} = state) when status != :idle do
@@ -164,6 +180,12 @@ defmodule Duet.Entry do
   @impl true
   def handle_info(_msg, state), do: {:noreply, state}
 
+  @impl true
+  def terminate(reason, state) do
+    if reason not in [:normal, :shutdown], do: Duet.record_entry_failure(state.name, reason)
+    if Port.info(state.port), do: Port.close(state.port)
+  end
+
   defp decode_and_process(line, state) do
     AppServerCommon.decode_and_process(
       line,
@@ -228,6 +250,7 @@ defmodule Duet.Entry do
 
   defp handle_response(_id, result, %{pending_method: :thread_start} = state) do
     thread_id = get_in(result, ["thread", "id"])
+    Logger.info("[Duet.Entry:#{state.name}] ready (codex)")
 
     state = %{
       state
@@ -527,52 +550,4 @@ defmodule Duet.Entry do
 
   defp maybe_put(params, _key, nil), do: params
   defp maybe_put(params, key, value), do: Map.put(params, key, value)
-
-  defp build_compact_summary_prompt do
-    """
-    現在の会話を新しいスレッドへ引き継ぐため、後続のAIエージェント向けの引き継ぎメモを作成してください。
-
-    含める内容:
-    - ユーザーの目的、制約、明示された好み
-    - 決定済みの方針と、その理由
-    - 作業の現状、変更済みのファイル、確認済みの事実
-    - 未解決の課題、次に行うべきこと、注意点
-    - 重要なコード、コマンド、エラー、参照情報
-
-    憶測は事実と分けてください。不要な挨拶や前置きは避けてください。
-    要約のみを出力し、それ以外のコメントは不要です。
-    """
-    |> String.trim()
-  end
-
-  defp build_compact_handoff_prompt(summary) do
-    """
-    以下は前スレッドからの引き継ぎ情報です。
-    これはユーザーからの新しい作業依頼ではなく、今後の応答で保持すべき会話文脈です。
-    内容を把握したうえで、以後この前提を引き継いでください。
-
-    <handoff>
-    #{summary}
-    </handoff>
-
-    引き継ぎ内容を短く確認してください。
-    """
-    |> String.trim()
-  end
-
-  defp build_turn_input(%{first_turn: true, role: role}, user_prompt) when role != "" do
-    role_prompt = String.trim(role)
-    practice = String.trim(@timeout_avoidance_practice)
-
-    [
-      %{
-        type: "text",
-        text: "あなたのroleは#{role_prompt}です。\n\n#{practice}\n\n#{user_prompt}"
-      }
-    ]
-  end
-
-  defp build_turn_input(_state, user_prompt) do
-    [%{type: "text", text: user_prompt}]
-  end
 end
