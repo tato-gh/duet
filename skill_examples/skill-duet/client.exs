@@ -25,6 +25,12 @@ defmodule DuetScript do
         {:claude_error, _} ->
           "Claude のエラー内容と起動側ログを確認してください。認証・利用枠・モデル設定を確認し、必要なら修正してください。"
 
+        :unsupported_slash_command ->
+          "agy entry は /clear と /compact 以外の / で始まる prompt を受け付けません。先頭の / を避けて送り直してください。"
+
+        {:agy_error, _} ->
+          "Antigravity CLI のエラー内容と起動側ログを確認してください。認証・利用枠・モデル設定を確認し、必要なら修正してください。"
+
         {:initialize_failed, _} ->
           "初期化に失敗しました。起動側ログで認証・設定を確認し、修正後に Duet を再起動してください。"
 

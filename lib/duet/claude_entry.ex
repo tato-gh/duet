@@ -80,7 +80,7 @@ defmodule Duet.ClaudeEntry do
         do: args,
         else: args ++ ["--allowedTools", Enum.join(config.allowed_tools, ",")]
 
-    config.command <> " " <> Enum.map_join(args, " ", &shell_escape/1)
+    config.command <> " " <> Enum.map_join(args, " ", &AppServerCommon.shell_escape/1)
   end
 
   @impl true
@@ -420,6 +420,4 @@ defmodule Duet.ClaudeEntry do
     if Port.info(port), do: Port.close(port)
     :ok
   end
-
-  defp shell_escape(value), do: "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
 end

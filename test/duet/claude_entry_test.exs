@@ -186,7 +186,7 @@ defmodule Duet.ClaudeEntryTest do
     assert launch["claudecode"] == nil
   end
 
-  test "broadcasts work across Codex and Claude entries", ctx do
+  test "broadcasts work across Codex, Claude and agy entries", ctx do
     {claude, claude_log} = start_entry(ctx, "claude")
     codex_log = Path.join(ctx.dir, "codex.jsonl")
     File.write!(codex_log, "")
@@ -203,15 +203,36 @@ defmodule Duet.ClaudeEntryTest do
     }
 
     codex = start_supervised!({Duet.Entry, config})
-    wait_for(fn -> :sys.get_state(codex).status == :idle end)
-    assert [{"claude", {:ok, "broadcast"}}, {"codex", {:ok, _}}] = Duet.post_all("broadcast")
-    assert {:ok, ["claude", "codex"]} = Duet.cast_all("reserved")
+    agy_script = Path.expand("../support/fake_agy.script", __DIR__)
+    agy_log = Path.join(ctx.dir, "agy.jsonl")
 
-    wait_for(fn ->
-      :sys.get_state(claude).status == :idle and :sys.get_state(codex).status == :idle
-    end)
+    agy =
+      start_supervised!(
+        {Duet.Entry,
+         %{
+           name: "agy",
+           backend: :agy,
+           role: "",
+           command: "elixir #{agy_script} #{agy_log}",
+           model: nil,
+           reasoning_effort: nil,
+           mode: "plan"
+         }}
+      )
+
+    ready? = fn -> Enum.all?([agy, claude, codex], &(:sys.get_state(&1).status == :idle)) end
+    wait_for(ready?)
+
+    assert [{"agy", {:ok, "broadcast"}}, {"claude", {:ok, "broadcast"}}, {"codex", {:ok, _}}] =
+             Duet.post_all("broadcast")
+
+    assert {:ok, ["agy", "claude", "codex"]} = Duet.cast_all("reserved")
+    wait_for(ready?)
 
     assert inputs(claude_log) == ["broadcast", "reserved"]
+
+    assert [%{"args" => _}, %{"prompt" => "broadcast"}, %{"prompt" => "reserved"}] =
+             records(agy_log)
   end
 
   @tag :capture_log

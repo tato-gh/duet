@@ -36,4 +36,10 @@ entries:
     # permission_mode: "acceptEdits"
     # tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
     # allowed_tools: ["Bash(mix test *)"]
+
+  - name: "agy_reviewer"
+    backend: "agy"
+    role: "設計・コードのレビュー担当。問題点と改善案を簡潔に説明する。"
+    # command は既定で agy。stream-json などの必須引数は Duet が追加する。
+    mode: "plan"
 ---

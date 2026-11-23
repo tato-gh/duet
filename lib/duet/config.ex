@@ -72,6 +72,7 @@ defmodule Duet.Config do
     case Map.get(entry, "backend", "codex") do
       "codex" -> build_codex_entry(entry)
       "claude" -> build_claude_entry(entry)
+      "agy" -> build_agy_entry(entry)
       backend -> {:error, "Unknown backend for entry #{name}: #{inspect(backend)}"}
     end
   end
@@ -79,7 +80,7 @@ defmodule Duet.Config do
   defp build_entry(_), do: {:error, "entries item is missing required field 'name'"}
 
   defp build_codex_entry(%{"name" => name} = entry) do
-    with :ok <- reject_keys(entry, ["permission_mode", "tools", "allowed_tools"], "codex") do
+    with :ok <- reject_keys(entry, ~w(permission_mode tools allowed_tools mode), "codex") do
       {:ok,
        %{
          name: name,
@@ -145,6 +146,38 @@ defmodule Duet.Config do
          permission_mode: permission_mode,
          tools: tools,
          allowed_tools: allowed_tools
+       }}
+    end
+  end
+
+  defp build_agy_entry(%{"name" => name} = entry) do
+    allowed = ~w(name backend command role model reasoning_effort mode)
+    command = Map.get(entry, "command", "agy")
+    role = Map.get(entry, "role", "")
+    model = Map.get(entry, "model")
+    effort = Map.get(entry, "reasoning_effort")
+    mode = Map.get(entry, "mode", "plan")
+
+    with :ok <- reject_keys(entry, Map.keys(entry) -- allowed, "agy"),
+         :ok <- valid_setting(is_binary(command) and String.trim(command) != "", name, "command"),
+         :ok <- valid_setting(is_binary(role), name, "role"),
+         :ok <- valid_setting(is_nil(model) or (is_binary(model) and model != ""), name, "model"),
+         :ok <-
+           valid_setting(
+             effort in [nil, "low", "medium", "high", "xhigh", "max"],
+             name,
+             "reasoning_effort"
+           ),
+         :ok <- valid_setting(mode in ["plan", "accept-edits", "auto"], name, "mode") do
+      {:ok,
+       %{
+         name: name,
+         backend: :agy,
+         command: command,
+         role: role,
+         model: model,
+         reasoning_effort: effort,
+         mode: mode
        }}
     end
   end

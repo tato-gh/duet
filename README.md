@@ -1,12 +1,12 @@
 # Duet
 
-Duet は、名前付きの Codex / Claude Code セッションを常駐させ、AI エージェントから継続相談できるようにする Erlang RPC ブリッジです。
+Duet は、名前付きの Codex / Claude Code / Antigravity CLI セッションを常駐させ、AI エージェントから継続相談できるようにする Erlang RPC ブリッジです。
 
-各 entry は独立した CLI プロセスと会話文脈を持ちます。同じ entry に続けて依頼すると、前回までの文脈を保ったまま会話できます。Codex は `codex app-server`、Claude Code は `claude -p` の双方向 `stream-json` を使います。
+各 entry は独立した CLI プロセスと会話文脈を持ちます。同じ entry に続けて依頼すると、前回までの文脈を保ったまま会話できます。Codex は `codex app-server`、Claude Code と Antigravity CLI はそれぞれの双方向 `stream-json` を使います。
 
 ## 前提条件
 
-- 使用する backend の CLI がインストール・認証済みであること（Codex: `codex app-server`、Claude Code: `claude`）
+- 使用する backend の CLI がインストール・認証済みであること（Codex は `codex app-server`、Claude Code は `claude`、Antigravity CLI は `agy`）
 - Elixir
 - AI エージェント CLI（例: Claude Code）
 
@@ -26,6 +26,19 @@ mix build
 ```bash
 cd /path/to/project
 cp ~/duet/DUET.md.example ./DUET.md
+```
+
+Duet を呼び出す CLI に合わせて、プロジェクト内の skill 配置先を選びます。
+
+| 呼び出し側の CLI | 配置先 |
+| --- | --- |
+| Codex | `.codex/skills/` |
+| Claude Code | `.claude/skills/` |
+| Antigravity CLI (`agy`) | `.agents/skills/`（[Google のスキル配置仕様](https://antigravity.google/docs/cli/gcli-migration/#updated-skills-paths)） |
+
+以下は Claude Code での配置例です。Codex や Antigravity CLI から使う場合は表の配置先を指定してください。
+
+```bash
 mkdir -p .claude/skills
 ln -s ~/duet/skill_examples/skill-duet .claude/skills/skill-duet
 ```
@@ -140,6 +153,11 @@ entries:
     reasoning_effort: "high"
     permission_mode: "dontAsk"
     tools: ["Read", "Glob", "Grep"]
+
+  - name: "agy_reviewer"
+    backend: "agy"
+    role: "設計・コードのレビュー担当。問題点と改善案を簡潔に説明する。"
+    mode: "plan"
 ---
 ```
 
@@ -161,11 +179,11 @@ entry 共通:
 | キー | デフォルト | 説明 |
 | --- | --- | --- |
 | `name` | 必須 | entry 名。skill や RPC 呼び出しで使う識別子 |
-| `backend` | `codex` | `codex` または `claude`。同じ設定内で併用可能 |
-| `command` | backend による | Codex: `codex app-server`。Claude: `claude`（実行ファイルやラッパーの変更用。必須引数は Duet が追加） |
+| `backend` | `codex` | `codex`、`claude`、`agy`。同じ設定内で併用可能 |
+| `command` | backend による | `codex app-server`、`claude`、`agy`。実行ファイルやラッパーを指定でき、Claude と agy の必須引数は Duet が追加 |
 | `role` | `""` | 会話の初回ターンだけに付与するロール文 |
-| `model` | 未指定 | Codex の `thread/start`、Claude の `--model` に渡すモデル |
-| `reasoning_effort` | 未指定 | Codex の `effort`、Claude の `--effort`。Claude は `low` / `medium` / `high` / `xhigh` / `max`（モデルによる対応差あり） |
+| `model` | 未指定 | Codex の `thread/start`、Claude と agy の `--model` に渡すモデル |
+| `reasoning_effort` | 未指定 | Codex の `effort`、Claude と agy の `--effort`。Claude と agy は `low` / `medium` / `high` / `xhigh` / `max`（モデルによる対応差あり） |
 
 Codex 専用:
 
@@ -184,9 +202,14 @@ Claude 専用:
 | `tools` | `["Read", "Glob", "Grep"]` | 使用する組み込みツールの配列。`[]` は組み込みツールなし、`["default"]` は全組み込みツール |
 | `allowed_tools` | `[]` | 自動承認するツール規則の配列。例: `["Bash(mix test *)"]` |
 
-Claude entry に Codex 専用設定を指定すると起動時の設定エラーになります。
-Claude 専用設定を Codex entry に指定した場合もエラーです。
-Claude の未知のキー、不正な型・値、未知の backend は黙って無視せずエラーにします。
+Antigravity CLI 専用:
+
+| キー | デフォルト | 説明 |
+| --- | --- | --- |
+| `mode` | `"plan"` | agy の `--mode`。`plan` / `accept-edits` / `auto` |
+
+backend 専用設定を別の backend に指定すると、起動時に設定エラーになります。
+Claude と agy の未知のキー、不正な型・値、未知の backend も設定エラーになります。
 `backend` の省略時は Codex のため、既存の設定は変更不要です。
 
 Claude の既定の組み込みツールは読み取り用途に限定していますが、これは Codex の OS sandbox と同じものではありません。
@@ -205,6 +228,15 @@ Claude の初期化エラー・初期化タイムアウト・初期化中の CLI
 プロトコルの参照先: [Claude CLI](https://code.claude.com/docs/en/cli-reference)、
 [Anthropic Agent SDK の制御処理](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/query.py)。
 
+agy には `--input-format stream-json --output-format stream-json` と `--mode` を追加します。
+agy は `--disable-slash-commands` を付けると `--mode` が効かないため、Duet は `/clear` と `/compact` 以外の `/` で始まる prompt を agy に渡さず `{:error, :unsupported_slash_command}` を返します。予約も受け付けません。
+既定の `plan` は調査・計画向けです。agy は `--mode` を指定しないとファイル編集を許可するため、書き込みを止められる `plan` を既定にしています。ツールの実行可否は agy の実行モードと CLI 側の権限設定に従います。
+headless では権限確認ができないため、許可されていないコマンドなどは自動で拒否されます。拒否されるとターンはそこで終わり、Duet は応答の末尾に拒否された操作を `[Duet] agy の権限設定により拒否された操作: ...` として付けます。
+必要な操作は agy の `settings.json` の `permissions.allow` で許可してください。
+`command` にラッパーを使う場合は、追加引数を渡して `exec` で agy を起動してください。割り込みは CLI のプロセスに直接送ります。
+初期化に失敗した entry は停止し、ログと `entries.exs --status` に理由を表示します。
+[Antigravity CLI の Headless mode](https://antigravity.google/docs/cli/headless/)・[実行モード](https://antigravity.google/docs/cli/modes/)。
+
 Duetはentry processへ`CODEX_DUET_ENTRY=1`と`CODEX_DUET_ENTRY_NAME=<entry名>`を設定します。
 `codex app-server` commandにはCodexの`shell_environment_policy.set`も自動で追加し、turn内のshell commandへ同じ値を渡します。
 custom app-server commandを使う場合、tool実行環境までの伝播はそのcommand側で保証してください。
@@ -221,7 +253,7 @@ Claude の `permission_mode: "default"` も人間への承認待ちにはなり�
 
 ## 操作
 
-起動ログの `ready (codex)` / `ready (claude)` は CLI の初期化完了を示します。
+起動ログの `ready (codex)` / `ready (claude)` / `ready (agy)` は CLI の初期化完了を示します。
 `ready` はモデル呼び出しの認証・利用枠まで検証した結果ではありません。
 付属の `entries.exs --status` で backend、`starting` / `ready` / `busy` / `interrupt_unknown` /
 `failed` / `unavailable`、予約件数、停止理由を確認できます。初期化失敗で停止した設定済み entry も表示します。
@@ -240,8 +272,14 @@ Claude 内蔵の `/compact` に処理を委譲するわけではありません�
 Claude の割り込み応答がタイムアウトすると、割り込み呼び出しと実行中の `post` は
 `{:error, :interrupt_timeout}` を返し、予約を保留します。遅れて応答・完了通知が届けば処理を再開します。
 応答が戻らない場合は `/clear` で新しい会話へ切り替えて復旧できます。旧会話の文脈は失われますが、予約は維持します。
-現在の終了処理は Port を閉じて CLI の stdin EOF による終了を促す方式です。
-OS プロセスの終了確認や SIGTERM/SIGKILL による回収は未実装のため、CLI が EOF に応答しない場合は旧プロセスが残る可能性があります。
+
+agy の `/clear` と `/compact` も、新しい CLI プロセスでそれぞれ新規会話と要約の引き継ぎを行います。
+割り込みは SIGINT を送り、旧プロセスの終了後に `--conversation` で同じ会話を再開します。
+タイムアウトした場合は予約を保留します。その後 CLI が終了すれば同じ会話を再開し、
+`/clear` で復旧する場合は CLI を強制終了して新しい会話へ切り替えます。
+
+通常の終了処理では Port を閉じて CLI の stdin に EOF を送り、CLI の終了を促します。
+CLI が EOF に応答しない場合は旧プロセスが残る可能性があります。
 
 `DUET_TIMEOUT_MINUTES`は呼び出し側の応答待機時間であり、entryの作業時間の上限ではありません。
 待機がタイムアウトしても、実行中のturnと予約済みの依頼は自動では中断されません。

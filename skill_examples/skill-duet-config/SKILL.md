@@ -15,7 +15,7 @@ AIエージェントは既存の記述を尊重しつつ、次回以降の作業
 
 - ユーザーが `DUET.md` や duet 設定の作成、更新、整理を依頼したとき
 - entry の追加、削除、名称変更、role の見直しを行うとき
-- approval policy、sandbox、network access などの権限設定を確認するとき
+- approval policy、sandbox、network access、実行モードなどの権限設定を確認するとき
 - プロジェクト固有のAI運用ルールを `DUET.md` に残したいとき
 - duet の使い方に関する合意や注意点を、次回以降のAIエージェントにも伝えたいとき
 
@@ -41,7 +41,7 @@ AIエージェントは既存の記述を尊重しつつ、次回以降の作業
 ## 確認が必要な内容
 
 - 既存 entry の削除、名称変更、用途変更
-- `approval_policy`、`thread_sandbox`、`turn_sandbox_policy`、`networkAccess` の変更
+- backend の切り替えや、承認・sandbox・ネットワーク・ツール・実行モードに関わる設定の変更
 - セキュリティ、権限、外部通信、デプロイ、秘密情報に関わるルール
 - チーム全体の開発フローや責任分界に関わる変更
 - 既存の合意を上書きする変更
@@ -49,19 +49,27 @@ AIエージェントは既存の記述を尊重しつつ、次回以降の作業
 
 ## 設定項目
 
-`DUET.md` の YAML front matter は Duet の設定であり、entry ごとの値は `codex app-server` の `thread/start` と `turn/start` に渡される。
-設定値を追加・変更するときは、まず既存の `DUET.md` とこの skill の設定表を優先する。
-Codex CLI のバージョン差分が疑わしい場合は `codex app-server --help` と `codex app-server generate-ts` または `codex app-server generate-json-schema` で確認する。
+`DUET.md` の YAML front matter は Duet が読み取る。entry の設定を変更するときは、`backend` を確認し、その backend の設定項目を使う。
+
+### 共通
 
 | 項目 | 意味 | 設定値・編集方針 |
 | --- | --- | --- |
 | `node_name` | Duet の Erlang node 名 | 省略時は`duet@localhost`。付属スクリプトを使う場合はトップレベルの1行に英数字・`_`・`.`・`@`・`-`で書く。単一・二重引用符と行末コメントに対応。変更すると接続先名に影響するため確認する |
 | `entries` | 起動する entry の一覧 | entry 追加は用途が明確なら行ってよい。削除、名称変更、統合は確認する |
 | `entries[].name` | entry の識別名 | 必須。skill や RPC 呼び出しで使うため、既存名の変更は確認する |
-| `entries[].command` | app-server 起動コマンド | 通常は `"codex app-server"`。`--listen`、`--config`、`--enable` などを足す場合は影響範囲を確認する |
+| `entries[].backend` | entry を実行する CLI | `codex`、`claude`、`agy`。省略時は `codex`。同じ設定内で併用できる |
+| `entries[].command` | CLI の起動コマンド | 既定は順に `codex app-server`、`claude`、`agy`。Claude と agy の必須引数は Duet が追加する |
 | `entries[].role` | entry の初回 turn に渡す役割説明 | 用途に合わせて整理してよい。長すぎる一般論より、任せたい振る舞いと判断基準を短く書く |
-| `entries[].model` | `thread/start` に渡すモデル | 未指定なら Codex の既定モデル。例: `"gpt-5.6-luna"` |
-| `entries[].reasoning_effort` | `turn/start` に渡す推論強度 | 未指定なら Codex の既定。GPT-5.6 では `none`、`low`、`medium`、`high`、`xhigh`、`max` を使える |
+| `entries[].model` | 使用するモデル | backend が認識するモデル名。省略時は CLI の設定に従う |
+| `entries[].reasoning_effort` | 推論強度 | `low`、`medium`、`high`、`xhigh`、`max`。Codex では `none` も指定できる。利用できる値はモデルに依存する |
+
+### Codex 専用
+
+CLI のバージョン差分は `codex app-server --help` と `codex app-server generate-ts` または `codex app-server generate-json-schema` で確認する。
+
+| 項目 | 意味 | 設定値・編集方針 |
+| --- | --- | --- |
 | `entries[].service_tier` | `thread/start` に渡す app-server のサービス階層 | 未指定なら標準。Fastを使う場合は `"fast"`。対応モデル、利用形態、クレジット消費に注意する |
 | `entries[].approval_policy` | `turn/start` などに渡す承認ポリシー | 代表値は `"never"`、`"on-request"`、`"on-failure"`、`"untrusted"`。権限運用に関わるため変更は確認する |
 | `entries[].thread_sandbox` | `thread/start` に渡す sandbox mode | 代表値は `"read-only"`、`"workspace-write"`、`"danger-full-access"`。thread 作成時の権限に関わるため変更は確認する |
@@ -71,7 +79,7 @@ Codex CLI のバージョン差分が疑わしい場合は `codex app-server --h
 | `entries[].turn_sandbox_policy.excludeTmpdirEnvVar` | `workspaceWrite` で環境変数由来の tmpdir を書き込み対象から外すか | 最新 schema で見える詳細設定。必要性が明確な場合だけ使う |
 | `entries[].turn_sandbox_policy.excludeSlashTmp` | `workspaceWrite` で `/tmp` を書き込み対象から外すか | 最新 schema で見える詳細設定。必要性が明確な場合だけ使う |
 
-## 設定値の目安
+#### Codex の設定値の目安
 
 - 相談専用 entry は `thread_sandbox: "read-only"` と `turn_sandbox_policy.type: "readOnly"` を基本にする
 - 作業伴走 entry は `workspace-write` / `workspaceWrite` を使える。共有設定では `writableRoots` を省き、role と運用メモで意図する書き込み範囲を明示する
@@ -82,7 +90,19 @@ Codex CLI のバージョン差分が疑わしい場合は `codex app-server --h
 - `approval_policy: "untrusted"` は信頼済みでない操作の承認を求める用途に使う
 - Codex app-server は experimental なため、未知の値や新しい permission profile を `DUET.md` に入れる前に、現在の Codex CLI で使える値か確認する
 
-Duetはユーザー入力要求にも非対話セッションである旨を返す。対話的な承認・入力が必要な作業は、entryから呼び出し側へ不足を報告させる。
+### Claude Code 専用
+
+| 項目 | 意味 | Duet の既定値 |
+| --- | --- | --- |
+| `permission_mode` | Claude の承認モード | `dontAsk` |
+| `tools` | 利用可能な組み込みツール | `["Read", "Glob", "Grep"]` |
+| `allowed_tools` | 自動承認するツール規則 | `[]` |
+
+### Antigravity CLI 専用
+
+`mode` の既定値は `plan`（調査・計画向け）。`accept-edits` はワークスペース内の編集を自動承認し、`auto` は CLI の条件を満たすコマンドも自動承認する。ツールの実行可否は agy 側の権限設定にも従う。 [Google の実行モード仕様](https://antigravity.google/docs/cli/modes/)
+
+Duet は非対話で動作する。ユーザーの承認や入力を必要とする操作は、entry から呼び出し側へ不足を報告させる。
 
 ## 編集手順
 
@@ -121,6 +141,10 @@ entries:
       networkAccess: true
       excludeTmpdirEnvVar: false
       excludeSlashTmp: false
+  - name: "agy_reviewer"
+    backend: "agy"
+    role: "設計とコードを調査し、レビュー結果を簡潔に説明する。"
+    mode: "plan"
 ---
 
 # DUET
@@ -128,6 +152,7 @@ entries:
 ## entry の使い分け
 
 - `work_partner`: 作業中の相談、反証、レビューに使う
+- `agy_reviewer`: 設計・コードの調査とレビューに使う
 
 ## 運用メモ
 

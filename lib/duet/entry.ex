@@ -10,6 +10,7 @@ defmodule Duet.Entry do
   import Duet.EntryPrompts
 
   def start_link(%{backend: :claude} = config), do: Duet.ClaudeEntry.start_link(config)
+  def start_link(%{backend: :agy} = config), do: Duet.AgyEntry.start_link(config)
 
   def start_link(%{name: name} = config) do
     GenServer.start_link(__MODULE__, config, name: {:via, Registry, {Duet.EntryRegistry, name}})
@@ -19,7 +20,7 @@ defmodule Duet.Entry do
     %{
       id: {__MODULE__, name},
       start: {__MODULE__, :start_link, [config]},
-      restart: if(Map.get(config, :backend) == :claude, do: :transient, else: :permanent),
+      restart: if(Map.get(config, :backend) in [:claude, :agy], do: :transient, else: :permanent),
       type: :worker
     }
   end

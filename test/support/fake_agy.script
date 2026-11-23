@@ -1,0 +1,42 @@
+[log | args] = System.argv()
+
+record = fn event -> File.write!(log, JSON.encode!(event) <> "\n", [:append]) end
+emit = fn event -> IO.puts(JSON.encode!(event)) end
+result = fn status, fields ->
+  emit.(%{event: "result", result: Map.put(fields, :status, status)})
+end
+
+record.(%{args: args, entry: System.get_env("CODEX_DUET_ENTRY_NAME")})
+
+if "--bad-startup" in args do
+  result.("ERROR", %{error: "invalid model"})
+  System.halt(1)
+end
+
+emit.(%{event: "init", conversation_id: "conversation-#{System.pid()}"})
+
+Enum.reduce(IO.stream(:stdio, :line), "", fn line, previous ->
+  %{"event" => "user", "message" => %{"content" => prompt}} = JSON.decode!(line)
+  record.(%{prompt: prompt})
+
+  cond do
+    prompt == "fail" ->
+      result.("ERROR", %{error: "model failed"})
+      previous
+
+    prompt == "denied" ->
+      denied = [%{action: "command", display_name: "Bash"}, %{action: "command", display_name: "Bash"}]
+      result.("SUCCESS", %{response: "確認します。", denied_actions: denied})
+      previous
+
+    String.contains?(prompt, "引き継ぎメモを作成") ->
+      summary = if previous == "empty summary", do: "", else: "引き継ぎ要約"
+      result.("SUCCESS", %{response: summary})
+      previous
+
+    true ->
+      emit.(%{event: "step_update", step_update: %{text_delta: "partial"}})
+      result.("SUCCESS", %{response: String.trim(previous <> "\n" <> prompt)})
+      prompt
+  end
+end)

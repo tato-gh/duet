@@ -122,7 +122,7 @@ defmodule Duet.AppServerCommon do
     end
   end
 
-  defp shell_escape(value) do
+  def shell_escape(value) do
     "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
   end
 end

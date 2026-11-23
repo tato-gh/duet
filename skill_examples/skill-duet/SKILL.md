@@ -22,6 +22,7 @@ entry名が不明なとき、会話の初回、または`:not_found`が返った
 
 entryは`DUET.md`のあるプロジェクトディレクトリで動く。Codex のファイル操作は`approval_policy`、`thread_sandbox`、`turn_sandbox_policy`に従う。
 Claude は`permission_mode`、`tools`、`allowed_tools`に従う。Claude のツール制限は Codex の OS sandbox と同じではない。
+agy の操作可否は `mode` と CLI 側の権限設定に従う。
 Duet は人間への承認要求を転送せず、対話承認が必要な要求を拒否する。
 
 PJ内の情報はパスや対象diffを示して読ませ、本文を転載しない。会話で決まった未記録の制約や、前回からの変更だけ補う。
@@ -105,6 +106,8 @@ elixir --sname NAME@localhost /absolute/path/to/skill-duet/post.exs ENTRY_NAME '
 | `"failed"` / `"interrupted"` | turnが失敗または中断された。途中の変更と継続の必要性を確認してから再依頼する |
 | `{:rpc_error, error}` | app-serverのRPC error。内容を確認し、必要ならentryや依頼を見直す |
 | `{:claude_error, error}` | Claude の処理エラー。内容と起動側ログから認証・利用枠・モデル設定を確認する |
+| `:unsupported_slash_command` | agy entry へ `/clear`・`/compact` 以外の `/` で始まる prompt を送った。entry と会話は維持される。先頭の `/` を避けて送り直す |
+| `{:agy_error, error}` | Antigravity CLI の処理エラー。内容と起動側ログから認証・利用枠・モデル設定を確認する |
 | `:interrupt_timeout` | 割り込みの成否が未確認。自動再送せず状態とログを確認する。遅い応答で再開することがある。復旧しなければ `/clear`。旧会話は失われるが予約は維持する |
 | `{:initialize_failed, error}` / `:initialize_timeout` | 初期化失敗。ログで認証・設定を確認し、修正後に Duet を再起動する |
 | `{:port_exit, status}` | CLI が終了した。`entries.exs --status` と起動側ログを確認する |
